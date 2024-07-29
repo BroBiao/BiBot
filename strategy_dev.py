@@ -18,6 +18,8 @@ from dotenv import load_dotenv
 from fetchPairs import update_pairs
 
 
+os.environ['TZ'] = 'Asia/Shanghai'
+time.tzset()
 pairs_path = Config.PAIRS_PATH
 watchlist_path = Config.WL_PATH
 load_dotenv()
@@ -193,12 +195,12 @@ def run():
                     )
                 PV_message = get_latest_PVs(3)
                 if (min(oc_min[h1:]) > oc_min[l0]) and (h2 == (klines_num-5-1)):
-                    message2send = 'Bullish Flag Detected!\n' + flag_message + '\n\n' + PV_message
+                    message2send = f'\U0001F42E\U0001F6A9 Bullish Flag Detected!\n' + flag_message + '\n\n' + PV_message
                     send_message(message2send)
                 else:
                     hh_trend = oc_max[h2] + ((oc_max[h1] - oc_max[h2]) / (h1 - h2)) * (klines_num-1 - h2)
                     if (oc_max[-1] > hh_trend) and (oc_max[-2] <= hh_trend):
-                        message2send = 'Bullish Flag Breakout!\n' + flag_message + '\n\n' + PV_message
+                        message2send = f'\U0001F42E\U0001F4C8 Bullish Flag Breakout!\n' + flag_message + '\n\n' + PV_message
                         send_message(message2send)
                     else:
                         pass
@@ -216,12 +218,12 @@ def run():
                     )
                 PV_message = get_latest_PVs(3)
                 if max(oc_max[l1:]) < oc_max[h0] and (l2 == (klines_num-5-1)):
-                    message2send = 'Bearish Flag Detected!\n' + flag_message + '\n\n' + PV_message
+                    message2send = f'\U0001F43B\U0001F6A9 Bearish Flag Detected!\n' + flag_message + '\n\n' + PV_message
                     send_message(message2send)
                 else:
                     ll_trend = oc_min[l2] + ((oc_min[l1] - oc_min[l2]) / (l1 - l2)) * (klines_num-1 - l2)
                     if (oc_min[-1] < ll_trend) and (oc_min[-2] >= ll_trend):
-                        message2send = 'Bearish Flag Breakout!\n' + flag_message + '\n\n' + PV_message
+                        message2send = f'\U0001F43B\U0001F4C9 Bearish Flag Breakout!\n' + flag_message + '\n\n' + PV_message
                         send_message(message2send)
                     else:
                         pass

@@ -48,12 +48,12 @@ class PairData(object):
         self.mid_period = Config.MID_PERIOD
         self.slow_period = Config.SLOW_PERIOD
 
-    def get_klines(self, interval, endTime=None):
+    def get_klines(self, interval, endTime=None, limit=None):
         if not hasattr(self, 'klines'):
             self.klines = {}
         if (interval not in self.klines.keys()):
             url = self.base_url + self.kline_url
-            params = {'symbol': self.pair, 'interval': interval, 'endTime': endTime}
+            params = {'symbol': self.pair, 'interval': interval, 'endTime': endTime, 'limit': limit}
             res = requests.get(url, params=params, proxies=proxies)
             if res.status_code == 200:
                 raw_data = json.loads(res.text)
@@ -130,7 +130,7 @@ def run():
             # Main Strategy: Bullish/Bearish Flag Strategy
             small_klines = data.get_klines(small_interval)
             klines_num = len(small_klines['open'])
-            # print(str(dt.datetime.fromtimestamp(small_klines['opentime'][-1]/1000)))
+            print(str(dt.datetime.fromtimestamp(small_klines['opentime'][-1]/1000)))
             oc_max = [max(small_klines['open'][i], small_klines['close'][i]) for i in range(klines_num)]
             oc_min = [min(small_klines['open'][i], small_klines['close'][i]) for i in range(klines_num)]
             local_peaks = []
@@ -183,88 +183,95 @@ def run():
 
 
             # Check Bullish Flag
-            if local_peaks[-2][1] > local_peaks[-1][1]:
-                h1 = local_peaks[-2][0]
-                h2 = local_peaks[-1][0]
-                l0 = find_prev_PV_index(h1, 'valley')
-                flag_message = '%s\nL0: %s  %f\nH1: %s  %f\nH2: %s  %f' % (
-                    pair, 
-                    str(dt.datetime.fromtimestamp(small_klines['opentime'][l0]/1000)), oc_min[l0],
-                    str(dt.datetime.fromtimestamp(small_klines['opentime'][h1]/1000)), oc_max[h1],
-                    str(dt.datetime.fromtimestamp(small_klines['opentime'][h2]/1000)), oc_max[h2]
-                    )
-                PV_message = get_latest_PVs(3)
-                if (min(oc_min[h1:]) > oc_min[l0]) and (h2 == (klines_num-5-1)):
-                    message2send = f'\U0001F42E\U0001F6A9 Bullish Flag Detected!\n' + flag_message + '\n\n' + PV_message
-                    send_message(message2send)
+            peak_count = 1
+            for i in range(1, len(local_peaks)):
+                if local_peaks[-i][1] < local_peaks[-i-1][1]:
+                    peak_count += 1
                 else:
-                    hh_trend = oc_max[h2] + ((oc_max[h1] - oc_max[h2]) / (h1 - h2)) * (klines_num-1 - h2)
-                    if (oc_max[-1] > hh_trend) and (oc_max[-2] <= hh_trend):
-                        message2send = f'\U0001F42E\U0001F4C8 Bullish Flag Breakout!\n' + flag_message + '\n\n' + PV_message
-                        send_message(message2send)
-                    else:
-                        pass
+                    if peak_count >= 2:
+                        flag_message = ''
+                        for j in range(peak_count):
+                            peak_index = local_peaks[-i+j][0]
+                            flag_message += f'H{j+1}: %s  %f\n' % (
+                                str(dt.datetime.fromtimestamp(small_klines['opentime'][peak_index]/1000)), oc_max[peak_index]
+                                )
+                        valley_index = find_prev_PV_index(local_peaks[-i][0], 'valley')
+                        flag_message += 'L0: %s  %f\n' % (
+                            str(dt.datetime.fromtimestamp(small_klines['opentime'][valley_index]/1000)), oc_min[valley_index]
+                            )
+                        hh = local_peaks[-i][0]    # the highest/furthest peak
+                        h1 = local_peaks[-i+j][0]    # the lowest/nearest peak
+                        h2 = local_peaks[-i+j-1][0]    # the second lowest/nearest peak
+                        if min(oc_min[hh:]) > oc_min[valley_index]:
+                            peak_trend = oc_max[h1] + ((oc_max[h1] - oc_max[h2]) / (h1 - h2)) * (klines_num-1 - h1)
+                            if (oc_max[-1] >= peak_trend) and (oc_max[-2] < peak_trend):
+                                message2send = f'\U0001F42E\U0001F4C8 Bullish Flag Breakout!\n{pair}\n' + flag_message
+                                send_message(message2send)
+                            elif h1 == klines_num-5-1:
+                                message2send = f'\U0001F42E\U0001F6A9 Bullish Flag Detected!\n{pair}\n' + flag_message
+                                send_message(message2send)
+                            else:
+                                pass
+                    break
 
             # Check Bearish Flag
-            if local_valleys[-2][1] < local_valleys[-1][1]:
-                l1 = local_valleys[-2][0]
-                l2 = local_valleys[-1][0]
-                h0 = find_prev_PV_index(l1, 'peak')
-                flag_message = '%s\nH0: %s  %f\nL1: %s  %f\nL2: %s  %f' % (
-                    pair,
-                    str(dt.datetime.fromtimestamp(small_klines['opentime'][h0]/1000)), oc_max[h0],
-                    str(dt.datetime.fromtimestamp(small_klines['opentime'][l1]/1000)), oc_min[l1],
-                    str(dt.datetime.fromtimestamp(small_klines['opentime'][l2]/1000)), oc_min[l2]
-                    )
-                PV_message = get_latest_PVs(3)
-                if max(oc_max[l1:]) < oc_max[h0] and (l2 == (klines_num-5-1)):
-                    message2send = f'\U0001F43B\U0001F6A9 Bearish Flag Detected!\n' + flag_message + '\n\n' + PV_message
-                    send_message(message2send)
+            valley_count = 1
+            for i in range(1, len(local_valleys)):
+                if local_valleys[-i][1] > local_valleys[-i-1][1]:
+                    valley_count += 1
                 else:
-                    ll_trend = oc_min[l2] + ((oc_min[l1] - oc_min[l2]) / (l1 - l2)) * (klines_num-1 - l2)
-                    if (oc_min[-1] < ll_trend) and (oc_min[-2] >= ll_trend):
-                        message2send = f'\U0001F43B\U0001F4C9 Bearish Flag Breakout!\n' + flag_message + '\n\n' + PV_message
-                        send_message(message2send)
-                    else:
-                        pass
-
-
+                    if valley_count >= 2:
+                        flag_message = ''
+                        for j in range(valley_count):
+                            valley_index = local_valleys[-i+j][0]
+                            flag_message += f'L{j+1}: %s  %f\n' % (
+                                str(dt.datetime.fromtimestamp(small_klines['opentime'][valley_index]/1000)), oc_min[valley_index]
+                                )
+                        peak_index = find_prev_PV_index(local_valleys[-i][0], 'peak')
+                        flag_message += 'H0: %s  %f\n' % (
+                            str(dt.datetime.fromtimestamp(small_klines['opentime'][peak_index]/1000)), oc_max[peak_index]
+                            )
+                        ll = local_valleys[-i][0]    # the lowest/furthest valley
+                        l1 = local_valleys[-i+j][0]    # the highst/nearest valley
+                        l2 = local_valleys[-i+j-1][0]    # the second highest/nearest valley
+                        if max(oc_max[ll:]) < oc_max[peak_index]:
+                            valley_trend = oc_min[l1] + ((oc_min[l1] - oc_min[l2]) / (l1 - l2)) * (klines_num-1 - l1)
+                            if (oc_min[-1] <= valley_trend) and (oc_min[-2] > valley_trend):
+                                message2send = f'\U0001F43B\U0001F4C9 Bearish Flag Breakout!\n{pair}\n' + flag_message
+                                send_message(message2send)
+                            elif h1 == klines_num-5-1:
+                                message2send = f'\U0001F43B\U0001F6A9 Bearish Flag Detected!\n{pair}\n' + flag_message
+                                send_message(message2send)
+                            else:
+                                pass
+                    break
 
 
             # # Backtest Section
             # # Bullish Flag: peaks get lower but the 'flag' is higher than the start of the 'pole'
-            # for i in range(len(local_peaks)-1):
-            #     if local_peaks[i][1] > local_peaks[i+1][1]:
-            #         h1 = local_peaks[i][0]
-            #         h2 = local_peaks[i+1][0]
-            #         l0 = find_prev_PV_index(h1, 'valley')
-            #         if min(oc_min[h1:h2+6]) > oc_min[l0]:
-            #             print('L0: ' + str(dt.datetime.fromtimestamp(small_klines['opentime'][l0]/1000)) + ' ' + str(oc_min[l0]))
-            #             print('H1: ' + str(dt.datetime.fromtimestamp(small_klines['opentime'][h1]/1000)) + ' ' + str(oc_max[h1]))
-            #             print('H2: ' + str(dt.datetime.fromtimestamp(small_klines['opentime'][h2]/1000)) + ' ' + str(oc_max[h2]))
-            #             print('\n')
-            #         else:
-            #             pass
+            # peak_count = 1
+            # for i in range(1, len(local_peaks)):
+            #     if local_peaks[-i][1] < local_peaks[-i-1][1]:
+            #         peak_count += 1
             #     else:
-            #         pass
-
-            # # Bearish Flag: valleys get higher but the 'flag' is lower than the start of the 'pole'
-            # for i in range(len(local_valleys)-1):
-            #     if local_valleys[i][1] < local_valleys[i+1][1]:
-            #         l1 = local_valleys[i][0]
-            #         l2 = local_valleys[i+1][0]
-            #         h0 = find_prev_PV_index(l1, 'peak')
-            #         if max(oc_max[l1:l2+6]) < oc_max[h0]:
-            #             print('H0: ' + str(dt.datetime.fromtimestamp(small_klines['opentime'][h0]/1000)) + ' ' + str(oc_max[h0]))
-            #             print('L1: ' + str(dt.datetime.fromtimestamp(small_klines['opentime'][l1]/1000)) + ' ' + str(oc_min[l1]))
-            #             print('L2: ' + str(dt.datetime.fromtimestamp(small_klines['opentime'][l2]/1000)) + ' ' + str(oc_min[l2]))
-            #             print('\n')
-            #         else:
-            #             pass
-            #     else:
-            #         pass
-
-
+            #         if peak_count >= 2:
+            #             flag_message = ''
+            #             for j in range(peak_count):
+            #                 peak_index = local_peaks[-i+j][0]
+            #                 flag_message += f'H{j+1}: %s  %f\n' % (
+            #                     str(dt.datetime.fromtimestamp(small_klines['opentime'][peak_index]/1000)), oc_max[peak_index]
+            #                     )
+            #             valley_index = find_prev_PV_index(local_peaks[-i][0], 'valley')
+            #             flag_message += 'L0: %s  %f\n' % (
+            #                 str(dt.datetime.fromtimestamp(small_klines['opentime'][valley_index]/1000)), oc_min[valley_index]
+            #                 )
+            #             hh = local_peaks[-i][0]    # the highest/furthest peak
+            #             h1 = local_peaks[-i+j][0]    # the lowest/nearest peak
+            #             h2 = local_peaks[-i+j-1][0]    # the second lowest/nearest peak
+            #             if min(oc_min[hh:h1+6]) > oc_min[valley_index]:
+            #                 message2send = f'\U0001F42E\U0001F6A9 Bullish Flag Detected!\n{pair}\n' + flag_message
+            #                 send_message(message2send)
+            #         peak_count = 1
 
 
 

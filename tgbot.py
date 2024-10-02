@@ -1,4 +1,5 @@
 import os
+import pytz
 import datetime as dt
 from utils import *
 from config import Config
@@ -10,6 +11,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 class TelegramBot:
     def __init__(self, token):
+        self.tz = pytz.timezone('Asia/Shanghai')
         self.watchlist_path = Config.WL_PATH
         self.application = Application.builder().token(token).build()
 
@@ -49,9 +51,9 @@ class TelegramBot:
                 local_peaks_index = data.get_peaks(oc_max, window_width)
                 local_peaks = [(klines['opentime'][i], oc_max[i]) for i in local_peaks_index]
                 peak_message = f'H1: %s  %f\nH2: %s  %f\nH3: %s  %f\n' % (
-                                str(dt.datetime.fromtimestamp(local_peaks[-3][0]/1000)), local_peaks[-3][1],
-                                str(dt.datetime.fromtimestamp(local_peaks[-2][0]/1000)), local_peaks[-2][1],
-                                str(dt.datetime.fromtimestamp(local_peaks[-1][0]/1000)), local_peaks[-1][1])
+                                str(dt.datetime.fromtimestamp(local_peaks[-3][0]/1000, self.tz)), local_peaks[-3][1],
+                                str(dt.datetime.fromtimestamp(local_peaks[-2][0]/1000, self.tz)), local_peaks[-2][1],
+                                str(dt.datetime.fromtimestamp(local_peaks[-1][0]/1000, self.tz)), local_peaks[-1][1])
                 await update.message.reply_text(pair + '\n' + peak_message)
             except Exception as e:
                 await update.message.reply_text('Error Occurred!\n' + str(e))
@@ -72,9 +74,9 @@ class TelegramBot:
                 local_valleys_index = data.get_peaks(oc_min_neg, window_width)
                 local_valleys = [(klines['opentime'][i], oc_min[i]) for i in local_valleys_index]
                 valley_message = f'H1: %s  %f\nH2: %s  %f\nH3: %s  %f\n' % (
-                                str(dt.datetime.fromtimestamp(local_valleys[-3][0]/1000)), local_valleys[-3][1],
-                                str(dt.datetime.fromtimestamp(local_valleys[-2][0]/1000)), local_valleys[-2][1],
-                                str(dt.datetime.fromtimestamp(local_valleys[-1][0]/1000)), local_valleys[-1][1])
+                                str(dt.datetime.fromtimestamp(local_valleys[-3][0]/1000, self.tz)), local_valleys[-3][1],
+                                str(dt.datetime.fromtimestamp(local_valleys[-2][0]/1000, self.tz)), local_valleys[-2][1],
+                                str(dt.datetime.fromtimestamp(local_valleys[-1][0]/1000, self.tz)), local_valleys[-1][1])
                 await update.message.reply_text(pair + '\n' + valley_message)
             except Exception as e:
                 await update.message.reply_text('Error Occurred!\n' + str(e))

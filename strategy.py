@@ -1,5 +1,5 @@
 import os
-import time
+import pytz
 import asyncio
 import traceback
 import datetime as dt
@@ -11,8 +11,7 @@ from dotenv import load_dotenv
 
 
 # basic configs
-os.environ['TZ'] = 'Asia/Shanghai'
-time.tzset()
+tz = pytz.timezone('Asia/Shanghai')
 watchlist_path = Config.WL_PATH
 market_base_url = Config.MKT_BASE_URL
 
@@ -60,9 +59,9 @@ def run():
             # Check Bullish Flag
             if local_peaks[-2][1] > local_peaks[-1][1]:
                 flag_message = f'H1: %s  %f\nH2: %s  %f\nH3: %s  %f\n' % (
-                                str(dt.datetime.fromtimestamp(local_peaks[-3][0]/1000)), local_peaks[-3][1],
-                                str(dt.datetime.fromtimestamp(local_peaks[-2][0]/1000)), local_peaks[-2][1],
-                                str(dt.datetime.fromtimestamp(local_peaks[-1][0]/1000)), local_peaks[-1][1]
+                                str(dt.datetime.fromtimestamp(local_peaks[-3][0]/1000, tz)), local_peaks[-3][1],
+                                str(dt.datetime.fromtimestamp(local_peaks[-2][0]/1000, tz)), local_peaks[-2][1],
+                                str(dt.datetime.fromtimestamp(local_peaks[-1][0]/1000, tz)), local_peaks[-1][1]
                                 )
                 pair_market_url = market_base_url + pair
                 if (klines['opentime'][-1] - local_peaks[-1][0]) == window_width*timeframe_sec*1000:
@@ -77,9 +76,9 @@ def run():
             # Check Bearish Flag
             if local_valleys[-2][1] > local_valleys[-1][1]:
                 flag_message = f'L1: %s  %f\nL2: %s  %f\nL3: %s  %f\n' % (
-                                str(dt.datetime.fromtimestamp(local_valleys[-3][0]/1000)), local_valleys[-3][1],
-                                str(dt.datetime.fromtimestamp(local_valleys[-2][0]/1000)), local_valleys[-2][1],
-                                str(dt.datetime.fromtimestamp(local_valleys[-1][0]/1000)), local_valleys[-1][1]
+                                str(dt.datetime.fromtimestamp(local_valleys[-3][0]/1000, tz)), local_valleys[-3][1],
+                                str(dt.datetime.fromtimestamp(local_valleys[-2][0]/1000, tz)), local_valleys[-2][1],
+                                str(dt.datetime.fromtimestamp(local_valleys[-1][0]/1000, tz)), local_valleys[-1][1]
                                 )
                 pair_market_url = market_base_url + pair
                 if (klines['opentime'][-1] - local_valleys[-1][0]) == window_width*timeframe_sec*1000:

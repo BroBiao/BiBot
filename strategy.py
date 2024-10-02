@@ -74,7 +74,7 @@ def run():
                     pass
 
             # Check Bearish Flag
-            if local_valleys[-2][1] > local_valleys[-1][1]:
+            if local_valleys[-2][1] < local_valleys[-1][1]:
                 flag_message = f'L1: %s  %f\nL2: %s  %f\nL3: %s  %f\n' % (
                                 str(dt.datetime.fromtimestamp(local_valleys[-3][0]/1000, tz)), local_valleys[-3][1],
                                 str(dt.datetime.fromtimestamp(local_valleys[-2][0]/1000, tz)), local_valleys[-2][1],

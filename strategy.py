@@ -58,11 +58,16 @@ def run():
 
             # Check Bullish Flag
             if local_peaks[-2][1] > local_peaks[-1][1]:
-                flag_message = f'H1: %s  %f\nH2: %s  %f\nH3: %s  %f\n' % (
-                                str(dt.datetime.fromtimestamp(local_peaks[-3][0]/1000, tz)), local_peaks[-3][1],
+                flag_message = f'H2: %s  %f\nH1: %s  %f\n' % (
                                 str(dt.datetime.fromtimestamp(local_peaks[-2][0]/1000, tz)), local_peaks[-2][1],
-                                str(dt.datetime.fromtimestamp(local_peaks[-1][0]/1000, tz)), local_peaks[-1][1]
-                                )
+                                str(dt.datetime.fromtimestamp(local_peaks[-1][0]/1000, tz)), local_peaks[-1][1])
+                for i in range(2, len(local_peaks)):
+                    if local_peaks[-i-1][1] > local_peaks[-i][1]:
+                        flag_message = f'H{i+1}: %s  %f\n' % (
+                            str(dt.datetime.fromtimestamp(local_peaks[-i-1][0]/1000, tz)), local_peaks[-i-1][1]
+                        ) + flag_message
+                    else:
+                        break
                 pair_market_url = market_base_url + pair
                 if (klines['opentime'][-1] - local_peaks[-1][0]) == window_width*timeframe_sec*1000:
                     message2send = f'\U0001F42E\U0001F6A9 {pair}\n' + flag_message + pair_market_url
@@ -75,11 +80,14 @@ def run():
 
             # Check Bearish Flag
             if local_valleys[-2][1] < local_valleys[-1][1]:
-                flag_message = f'L1: %s  %f\nL2: %s  %f\nL3: %s  %f\n' % (
-                                str(dt.datetime.fromtimestamp(local_valleys[-3][0]/1000, tz)), local_valleys[-3][1],
+                flag_message = f'L2: %s  %f\nL1: %s  %f\n' % (
                                 str(dt.datetime.fromtimestamp(local_valleys[-2][0]/1000, tz)), local_valleys[-2][1],
-                                str(dt.datetime.fromtimestamp(local_valleys[-1][0]/1000, tz)), local_valleys[-1][1]
-                                )
+                                str(dt.datetime.fromtimestamp(local_valleys[-1][0]/1000, tz)), local_valleys[-1][1])
+                for i in range(2, len(local_valleys)):
+                    if local_valleys[-i-1][1] < local_valleys[-i][1]:
+                        flag_message = f'L{i+1}: %s  %f\n' % (
+                            str(dt.datetime.fromtimestamp(local_valleys[-i-1][0]/1000, tz)), local_valleys[-i-1][1]
+                        ) + flag_message
                 pair_market_url = market_base_url + pair
                 if (klines['opentime'][-1] - local_valleys[-1][0]) == window_width*timeframe_sec*1000:
                     message2send = f'\U0001F43B\U0001F6A9 {pair}\n' + flag_message + pair_market_url

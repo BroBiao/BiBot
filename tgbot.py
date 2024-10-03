@@ -40,9 +40,12 @@ class TelegramBot:
 
     async def get_peaks(self, update, context):
         msg_text = str(update.message.text).split()
-        if len(msg_text) == 3:
+        if len(msg_text) >= 3:
             pair = msg_text[1].upper() + 'USDT'
             timeframe = msg_text[2].lower()
+            peak_num = 3
+            if len(msg_text) >= 4:
+                peak_num = int(msg_text[3])
             try:
                 data = PairData(pair)
                 klines = data.get_klines(timeframe)
@@ -50,21 +53,25 @@ class TelegramBot:
                 oc_max = data.get_oc_max(timeframe)
                 local_peaks_index = data.get_peaks(oc_max, window_width)
                 local_peaks = [(klines['opentime'][i], oc_max[i]) for i in local_peaks_index]
-                peak_message = f'H1: %s  %f\nH2: %s  %f\nH3: %s  %f\n' % (
-                                str(dt.datetime.fromtimestamp(local_peaks[-3][0]/1000, self.tz)), local_peaks[-3][1],
-                                str(dt.datetime.fromtimestamp(local_peaks[-2][0]/1000, self.tz)), local_peaks[-2][1],
-                                str(dt.datetime.fromtimestamp(local_peaks[-1][0]/1000, self.tz)), local_peaks[-1][1])
+                peak_message = ''
+                for i in range(peak_num):
+                    peak_message += f'H{peak_num-i}: %s  %f\n' % (
+                        str(dt.datetime.fromtimestamp(local_peaks[-peak_num+i][0]/1000, self.tz)), 
+                        local_peaks[-peak_num+i][1])
                 await update.message.reply_text(pair + '\n' + peak_message)
             except Exception as e:
                 await update.message.reply_text('Error Occurred!\n' + str(e))
         else:
-            await update.message.reply_text("Sorry, invalid input.\nUsage example: /hh BTC 1h")
+            await update.message.reply_text("Sorry, invalid input.\nUsage example: /hh BTC 1h [4]")
 
     async def get_valleys(self, update, context):
         msg_text = str(update.message.text).split()
-        if len(msg_text) == 3:
+        if len(msg_text) >= 3:
             pair = msg_text[1].upper() + 'USDT'
             timeframe = msg_text[2].lower()
+            valley_num = 3
+            if len(msg_text) >= 4:
+                valley_num = int(msg_text[3])
             try:
                 data = PairData(pair)
                 klines = data.get_klines(timeframe)
@@ -73,10 +80,11 @@ class TelegramBot:
                 oc_min_neg = [-each for each in oc_min]
                 local_valleys_index = data.get_peaks(oc_min_neg, window_width)
                 local_valleys = [(klines['opentime'][i], oc_min[i]) for i in local_valleys_index]
-                valley_message = f'H1: %s  %f\nH2: %s  %f\nH3: %s  %f\n' % (
-                                str(dt.datetime.fromtimestamp(local_valleys[-3][0]/1000, self.tz)), local_valleys[-3][1],
-                                str(dt.datetime.fromtimestamp(local_valleys[-2][0]/1000, self.tz)), local_valleys[-2][1],
-                                str(dt.datetime.fromtimestamp(local_valleys[-1][0]/1000, self.tz)), local_valleys[-1][1])
+                valley_message = ''
+                for i in range(valley_num):
+                    valley_message = f'L{valley_num-i}: %s  %f\n' % (
+                        str(dt.datetime.fromtimestamp(local_valleys[-valley_num+i][0]/1000, self.tz)), 
+                        local_valleys[-valley_num+i][1])
                 await update.message.reply_text(pair + '\n' + valley_message)
             except Exception as e:
                 await update.message.reply_text('Error Occurred!\n' + str(e))

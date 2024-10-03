@@ -88,6 +88,8 @@ def run():
                         flag_message = f'L{i+1}: %s  %f\n' % (
                             str(dt.datetime.fromtimestamp(local_valleys[-i-1][0]/1000, tz)), local_valleys[-i-1][1]
                         ) + flag_message
+                    else:
+                        break
                 pair_market_url = market_base_url + pair
                 if (klines['opentime'][-1] - local_valleys[-1][0]) == window_width*timeframe_sec*1000:
                     message2send = f'\U0001F43B\U0001F6A9 {pair}\n' + flag_message + pair_market_url

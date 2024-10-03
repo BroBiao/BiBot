@@ -82,7 +82,7 @@ class TelegramBot:
                 local_valleys = [(klines['opentime'][i], oc_min[i]) for i in local_valleys_index]
                 valley_message = ''
                 for i in range(valley_num):
-                    valley_message = f'L{valley_num-i}: %s  %f\n' % (
+                    valley_message += f'L{valley_num-i}: %s  %f\n' % (
                         str(dt.datetime.fromtimestamp(local_valleys[-valley_num+i][0]/1000, self.tz)), 
                         local_valleys[-valley_num+i][1])
                 await update.message.reply_text(pair + '\n' + valley_message)

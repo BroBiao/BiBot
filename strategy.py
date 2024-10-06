@@ -69,14 +69,14 @@ def run():
                     else:
                         break
                 pair_market_url = market_base_url + pair
-                if (klines['opentime'][-1] - local_peaks[-1][0]) == window_width*timeframe_sec*1000:
+                trend_slope = (local_peaks[-2][1] - local_peaks[-1][1])/(local_peaks[-2][0] - local_peaks[-1][0])
+                trend_value = local_peaks[-1][1] + trend_slope * (klines['opentime'][-1] - local_peaks[-1][0])
+                if (oc_min[-2] < trend_value) and (oc_min[-1] >= trend_value):
                     message2send = f'\U0001F42E\U0001F6A9 {pair}\n' + flag_message + pair_market_url
                     send_message(message2send)
-                elif (oc_max[-1] >= local_peaks[-1][1]) and (oc_max[-2] < local_peaks[-1][1]):
+                if (oc_max[-1] >= local_peaks[-1][1]) and (oc_max[-2] < local_peaks[-1][1]):
                     message2send = f'\U0001F42E\U0001F4C8 {pair}\n' + flag_message + pair_market_url
                     send_message(message2send)
-                else:
-                    pass
 
             # Check Bearish Flag
             if local_valleys[-2][1] < local_valleys[-1][1]:
@@ -91,14 +91,14 @@ def run():
                     else:
                         break
                 pair_market_url = market_base_url + pair
-                if (klines['opentime'][-1] - local_valleys[-1][0]) == window_width*timeframe_sec*1000:
+                trend_slope = (local_valleys[-2][1] - local_valleys[-1][1])/(local_valleys[-2][0] - local_valleys[-1][0])
+                trend_value = local_valleys[-1][1] + trend_slope * (klines['opentime'][-1] - local_valleys[-1][0])
+                if (oc_max[-2] > trend_value) and (oc_max[-1] <= trend_value):
                     message2send = f'\U0001F43B\U0001F6A9 {pair}\n' + flag_message + pair_market_url
                     send_message(message2send)
-                elif (oc_min[-1] <= local_valleys[-1][1]) and (oc_min[-2] > local_valleys[-1][1]):
+                if (oc_min[-1] <= local_valleys[-1][1]) and (oc_min[-2] > local_valleys[-1][1]):
                     message2send = f'\U0001F43B\U0001F4C9 {pair}\n' + flag_message + pair_market_url
                     send_message(message2send)
-                else:
-                    pass
 
         except Exception as e:
             error_message = 'Error Occurred!\n' + pair + ': ' + traceback.format_exc()

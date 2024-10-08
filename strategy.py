@@ -56,7 +56,7 @@ def run():
             local_valleys_index = data.get_peaks(oc_min_neg, window_width)
             local_valleys = [(klines['opentime'][i], oc_min[i]) for i in local_valleys_index]
 
-            # Check Bullish Flag
+            # Check Bullish Flag & Descending Channel Pattern
             if local_peaks[-2][1] > local_peaks[-1][1]:
                 flag_message = f'H2: %s  %f\nH1: %s  %f\n' % (
                                 str(dt.datetime.fromtimestamp(local_peaks[-2][0]/1000, tz)), local_peaks[-2][1],
@@ -69,18 +69,22 @@ def run():
                     else:
                         break
                 pair_market_url = market_base_url + pair
-                trend_slope = (local_peaks[-2][1] - local_peaks[-1][1])/(local_peaks[-2][0] - local_peaks[-1][0])
-                trend_value = local_peaks[-1][1] + trend_slope * (klines['opentime'][-1] - local_peaks[-1][0])
-                if (oc_max[-2] < local_peaks[-1][1]) and (oc_max[-1] >= local_peaks[-1][1]):
+                if (klines['high'][-2] < local_peaks[-1][1]) and (klines['high'][-1] >= local_peaks[-1][1]):
                     message2send = f'\U0001F42E\U0001F4C8 {pair}\n' + flag_message + pair_market_url
                     send_message(message2send)
-                elif (oc_min[-2] < trend_value) and (oc_min[-1] >= trend_value):
-                    message2send = f'\U0001F42E\U0001F6A9 {pair}\n' + flag_message + pair_market_url
-                    send_message(message2send)
-                else:
-                    pass
+                if local_valleys[-2][1] >= local_valleys[-1][1]:
+                    peak_trend_slope = (local_peaks[-2][1] - local_peaks[-1][1])/(local_peaks[-2][0] - local_peaks[-1][0])
+                    peak_trend_value = local_peaks[-1][1] + peak_trend_slope * (klines['opentime'][-1] - local_peaks[-1][0])
+                    valley_trend_slope = (local_valleys[-2][1] - local_valleys[-1][1])/(local_valleys[-2][0] - local_valleys[-1][0])
+                    if ((peak_trend_slope <= valley_trend_slope) and (klines['high'][-2] < peak_trend_value) and 
+                        (klines['high'][-1] >= peak_trend_value)):
+                        flag_message += f'L2: %s  %f\nL1: %s  %f\n' % (
+                                        str(dt.datetime.fromtimestamp(local_valleys[-2][0]/1000, tz)), local_valleys[-2][1],
+                                        str(dt.datetime.fromtimestamp(local_valleys[-1][0]/1000, tz)), local_valleys[-1][1])
+                        message2send = f'\U00002197\U00002198 {pair}\n' + flag_message + pair_market_url
+                        send_message(message2send)
 
-            # Check Bearish Flag
+            # Check Bearish Flag & Ascending Channel Pattern
             if local_valleys[-2][1] < local_valleys[-1][1]:
                 flag_message = f'L2: %s  %f\nL1: %s  %f\n' % (
                                 str(dt.datetime.fromtimestamp(local_valleys[-2][0]/1000, tz)), local_valleys[-2][1],
@@ -93,14 +97,20 @@ def run():
                     else:
                         break
                 pair_market_url = market_base_url + pair
-                trend_slope = (local_valleys[-2][1] - local_valleys[-1][1])/(local_valleys[-2][0] - local_valleys[-1][0])
-                trend_value = local_valleys[-1][1] + trend_slope * (klines['opentime'][-1] - local_valleys[-1][0])
-                if (oc_min[-2] > local_valleys[-1][1]) and (oc_min[-1] <= local_valleys[-1][1]):
+                if (klines['low'][-2] > local_valleys[-1][1]) and (klines['low'][-1] <= local_valleys[-1][1]):
                     message2send = f'\U0001F43B\U0001F4C9 {pair}\n' + flag_message + pair_market_url
                     send_message(message2send)
-                elif (oc_max[-2] > trend_value) and (oc_max[-1] <= trend_value):
-                    message2send = f'\U0001F43B\U0001F6A9 {pair}\n' + flag_message + pair_market_url
-                    send_message(message2send)
+                if local_peaks[-2][1] <= local_peaks[-1][1]:
+                    valley_trend_slope = (local_valleys[-2][1] - local_valleys[-1][1])/(local_valleys[-2][0] - local_valleys[-1][0])
+                    valley_trend_value = local_valleys[-1][1] + valley_trend_slope * (klines['opentime'][-1] - local_valleys[-1][0])
+                    peak_trend_slope = (local_peaks[-2][1] - local_peaks[-1][1])/(local_peaks[-2][0] - local_peaks[-1][0])
+                    if ((valley_trend_slope >= peak_trend_slope) and (klines['low'][-2] > valley_trend_value) and 
+                        (klines['low'][-1] <= valley_trend_value)):
+                        flag_message = f'H2: %s  %f\nH1: %s  %f\n' % (
+                                       str(dt.datetime.fromtimestamp(local_peaks[-2][0]/1000, tz)), local_peaks[-2][1],
+                                       str(dt.datetime.fromtimestamp(local_peaks[-1][0]/1000, tz)), local_peaks[-1][1])
+                        message2send = f'\U00002198\U00002197 {pair}\n' + flag_message + pair_market_url
+                        send_message(message2send)
                 else:
                     pass
 

@@ -69,7 +69,7 @@ def run():
                     else:
                         break
                 pair_market_url = market_base_url + pair
-                if (klines['high'][-2] < local_peaks[-1][1]) and (klines['high'][-1] >= local_peaks[-1][1]):
+                if (oc_max[-2] < local_peaks[-1][1]) and (oc_max[-1] >= local_peaks[-1][1]):
                     message2send = f'\U0001F42E\U0001F4C8 {pair}\n' + flag_message + pair_market_url
                     send_message(message2send)
                 if local_valleys[-2][1] >= local_valleys[-1][1]:
@@ -97,7 +97,7 @@ def run():
                     else:
                         break
                 pair_market_url = market_base_url + pair
-                if (klines['low'][-2] > local_valleys[-1][1]) and (klines['low'][-1] <= local_valleys[-1][1]):
+                if (oc_min[-2] > local_valleys[-1][1]) and (oc_min[-1] <= local_valleys[-1][1]):
                     message2send = f'\U0001F43B\U0001F4C9 {pair}\n' + flag_message + pair_market_url
                     send_message(message2send)
                 if local_peaks[-2][1] <= local_peaks[-1][1]:
@@ -106,7 +106,7 @@ def run():
                     peak_trend_slope = (local_peaks[-2][1] - local_peaks[-1][1])/(local_peaks[-2][0] - local_peaks[-1][0])
                     if ((valley_trend_slope >= peak_trend_slope) and (klines['low'][-2] > valley_trend_value) and 
                         (klines['low'][-1] <= valley_trend_value)):
-                        flag_message = f'H2: %s  %f\nH1: %s  %f\n' % (
+                        flag_message += f'H2: %s  %f\nH1: %s  %f\n' % (
                                        str(dt.datetime.fromtimestamp(local_peaks[-2][0]/1000, tz)), local_peaks[-2][1],
                                        str(dt.datetime.fromtimestamp(local_peaks[-1][0]/1000, tz)), local_peaks[-1][1])
                         message2send = f'\U00002198\U00002197 {pair}\n' + flag_message + pair_market_url

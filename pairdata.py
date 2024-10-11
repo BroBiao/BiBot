@@ -51,7 +51,7 @@ class PairData(object):
             self.ema3['slow'] = df['price'].ewm(span=self.slow_period, adjust=False, min_periods=self.slow_period).mean().to_list()
         return self.ema3
 
-    def check_ema(self, timeframe, shift):
+    def check_ema(self, timeframe, shift=-1):
         self.get_ema3(timeframe)
         fast_ema = self.ema3['fast'][shift]
         mid_ema = self.ema3['mid'][shift]

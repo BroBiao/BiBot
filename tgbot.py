@@ -156,7 +156,10 @@ class TelegramBot:
 
     async def add_pricealert(self, update, context):
         try:
-            pricealert = read_json_file(self.pricealert_path)
+            if os.path.exists(self.pricealert_path):
+                pricealert = read_json_file(self.pricealert_path)
+            else:
+                pricealert = {}
             msg_text = str(update.message.text).split()
             if len(msg_text) >= 3:
                 pair = msg_text[1].upper() + 'USDT'

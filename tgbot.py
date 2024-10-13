@@ -164,8 +164,12 @@ class TelegramBot:
             if len(msg_text) >= 3:
                 pair = msg_text[1].upper() + 'USDT'
                 price = msg_text[2]
-                pricealert[pair] = price
+                pricealert[pair] = float(price)
                 write_to_json_file(pricealert, self.pricealert_path)
+                watchlist = read_json_file(self.watchlist_path)
+                if pair not in watchlist:
+                    watchlist.append(pair)
+                    write_to_json_file(watchlist, self.watchlist_path)
                 await update.message.reply_text(f'Added ({pair}, {price}) to price alerts.')
             else:
                 await update.message.reply_text("Sorry, invalid input.\nUsage example: /addpa BTC 60000")

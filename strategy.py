@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 # basic configs
 tz = pytz.timezone('Asia/Shanghai')
 watchlist_path = Config.WL_PATH
+pricealert_path = Config.PA_PATH
 market_base_url = Config.MKT_BASE_URL
 
 debug_mode = False
@@ -34,6 +35,12 @@ def send_message(message):
     else:
         asyncio.run(bot.send_message(chat_id=chat_id, text=message))
 
+def check_pricealert(pair, price, high_data, low_data):
+    if ((high_data[-2] < price) and (high_data[-1] >= price)) or ((low_data[-2] > price) and (low_data[-1] <= price)):
+        send_message(f'Price Alert Triggered: {pair} {price}')
+    else:
+        pass
+
 def run():
     operate_timeframe = Config.SMALL_TIMEFRAME
     operate_timeframe_sec = timeframe_to_seconds(operate_timeframe)
@@ -45,7 +52,7 @@ def run():
             # print(pair, str(all_pairs.index(pair)+1)+'/'+str(len(all_pairs)))
             data = PairData(pair, proxies)
 
-            # Main Strategy: Bullish/Bearish Flag Strategy
+            # Data acquisition and preprocessing
             klines = data.get_klines(operate_timeframe)
             window_width = Config.MAXMIN_WINDOW_WIDTH
             oc_max = data.get_oc_max(operate_timeframe)
@@ -60,6 +67,12 @@ def run():
             operate_trend = data.check_ema(operate_timeframe)
             observe_trend = data.check_ema(observe_timeframe)
 
+            # Check price alerts
+            pricealert = read_json_file(pricealert_path)
+            if pair in pricealert.keys():
+                check_pricealert(pair, pricealert[pair], klines['high'], klines['low'])
+
+            # Main Strategy: Bullish/Bearish Flag Strategy
             # Check Bullish Flag & Descending Channel Pattern
             if local_peaks[-2][1] > local_peaks[-1][1]:
                 flag_message = f'H2: %s  %f\nH1: %s  %f\n' % (

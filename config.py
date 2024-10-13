@@ -25,8 +25,10 @@ class Config:
     # file to story qualified trade pairs
     portfolio_file_name = 'portfolio.csv'
     watchlist_file_name = 'watchlist.json'
+    pricealert_file_name = 'pricealert.json'
 
     # convert the json file name to absolute path
     dir_path = os.path.dirname(os.path.abspath(__file__))
     PF_PATH = os.path.join(dir_path, portfolio_file_name)
     WL_PATH = os.path.join(dir_path, watchlist_file_name)
+    PA_PATH = os.path.join(dir_path, pricealert_file_name)

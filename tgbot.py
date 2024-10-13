@@ -13,6 +13,7 @@ class TelegramBot:
     def __init__(self, token):
         self.tz = pytz.timezone('Asia/Shanghai')
         self.watchlist_path = Config.WL_PATH
+        self.pricealert_path = Config.PA_PATH
         self.application = Application.builder().token(token).build()
 
     async def start_command(self, update, context):
@@ -140,47 +141,50 @@ class TelegramBot:
         else:
             await update.message.reply_text("Sorry, invalid input.\nUsage example: /bear 1h")
 
-    async def get_watchlist(self, update, context):
+    async def get_pricealert(self, update, context):
         try:
-            watchlist = str(read_json_file(self.watchlist_path))
-            await update.message.reply_text(watchlist)
+            pricealert = read_json_file(self.pricealert_path)
+            if not pricealert:
+                pa_message = 'Price Alerts:\n'
+                for key, value in pricealert.items():
+                    pa_message += f'{key}  {value}\n'
+            else:
+                pa_message = 'No price alert found.'
+            await update.message.reply_text(pa_message)
         except Exception as e:
-            await update.message.reply_text('Failed to read watchlist\n' + str(e))
+            await update.message.reply_text('Failed to read price alerts.\n' + str(e))
 
-    async def add_watchlist(self, update, context):
+    async def add_pricealert(self, update, context):
         try:
-            watchlist = read_json_file(self.watchlist_path)
+            pricealert = read_json_file(self.pricealert_path)
+            msg_text = str(update.message.text).split()
+            if len(msg_text) >= 3:
+                pair = msg_text[1].upper() + 'USDT'
+                price = msg_text[2]
+                pricealert[pair] = price
+                write_to_json_file(pricealert, self.pricealert_path)
+                await update.message.reply_text(f'Added ({pair}, {price}) to price alerts.')
+            else:
+                await update.message.reply_text("Sorry, invalid input.\nUsage example: /addpa BTC 60000")
+        except Exception as e:
+            await update.message.reply_text(f'Failed to add new price alert.\n' + str(e))
+
+    async def del_pricealert(self, update, context):
+        try:
+            pricealert = read_json_file(self.pricealert_path)
             msg_text = str(update.message.text).split()
             if len(msg_text) == 2:
                 pair = msg_text[1].upper() + 'USDT'
-                if pair not in watchlist:
-                    watchlist.append(pair)
-                    write_to_json_file(watchlist, self.watchlist_path)
-                    watchlist = str(read_json_file(self.watchlist_path))
-                    await update.message.reply_text(f'Added {pair} to watchlist. New watchlist:\n' + watchlist)
+                if pair in pricealert.keys():
+                    price = pricealert.pop(pair)
+                    write_to_json_file(pricealert, self.pricealert_path)
+                    await update.message.reply_text(f'Removed ({pair}, {price}) from price alerts.')
                 else:
-                    await update.message.reply_text(f'{pair} already in watchlist.')
+                    await update.message.reply_text(f'{pair} is not in price alerts')
             else:
-                await update.message.reply_text("Sorry, invalid input.\nUsage example: /addwl BTC")
+                await update.message.reply_text("Sorry, invalid input.\nUsage example: /delpa BTC")
         except Exception as e:
-            await update.message.reply_text(f'Failed to add {pair}\n' + str(e))
-
-    async def del_watchlist(self, update, context):
-        try:
-            watchlist = read_json_file(self.watchlist_path)
-            msg_text = str(update.message.text).split()
-            if len(msg_text) == 2:
-                pair = msg_text[1].upper() + 'USDT'
-                if pair in watchlist:
-                    watchlist.remove(pair)
-                    write_to_json_file(watchlist, self.watchlist_path)
-                    await update.message.reply_text(f'Removed {pair} from watchlist. New watchlist:\n' + str(watchlist))
-                else:
-                    await update.message.reply_text(f'{pair} is not in watchlist')
-            else:
-                await update.message.reply_text("Sorry, invalid input.\nUsage example: /delwl BTC")
-        except Exception as e:
-            await update.message.reply_text(f'Failed to delete {pair}\n' + str(e))
+            await update.message.reply_text(f'Failed to delete this price alert.\n' + str(e))
 
     def add_handlers(self):
         self.application.add_handler(CommandHandler('start', self.start_command))
@@ -189,9 +193,9 @@ class TelegramBot:
         self.application.add_handler(CommandHandler('ll', self.get_valleys))
         self.application.add_handler(CommandHandler('bull', self.get_bullflag))
         self.application.add_handler(CommandHandler('bear', self.get_bearflag))
-        self.application.add_handler(CommandHandler('getwl', self.get_watchlist))
-        self.application.add_handler(CommandHandler('addwl', self.add_watchlist))
-        self.application.add_handler(CommandHandler('delwl', self.del_watchlist))
+        self.application.add_handler(CommandHandler('getpa', self.get_pricealert))
+        self.application.add_handler(CommandHandler('addpa', self.add_pricealert))
+        self.application.add_handler(CommandHandler('delpa', self.del_pricealert))
 
     def run(self):
         self.add_handlers()

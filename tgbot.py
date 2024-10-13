@@ -144,7 +144,7 @@ class TelegramBot:
     async def get_pricealert(self, update, context):
         try:
             pricealert = read_json_file(self.pricealert_path)
-            if not pricealert:
+            if pricealert:
                 pa_message = 'Price Alerts:\n'
                 for key, value in pricealert.items():
                     pa_message += f'{key}  {value}\n'

@@ -131,5 +131,8 @@ def run():
 
 if __name__ == '__main__':
 
+    #logging
+    print(dt.datetime.now(tz))
+
     # main function
     run()

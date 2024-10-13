@@ -91,6 +91,53 @@ class TelegramBot:
         else:
             await update.message.reply_text("Sorry, invalid input.\nUsage example: /ll BTC 1h")
 
+    async def get_bullflag(self, update, context):
+        msg_text = str(update.message.text).split()
+        if len(msg_text) >= 2:
+            timeframe = msg_text[1].lower()
+            try:
+                watchlist = read_json_file(self.watchlist_path)
+                bullflag_message = f'{timeframe} BullFlag:\n'
+                for pair in watchlist:
+                    data = PairData(pair)
+                    klines = data.get_klines(timeframe)
+                    window_width = Config.MAXMIN_WINDOW_WIDTH
+                    oc_max = data.get_oc_max(timeframe)
+                    local_peaks_index = data.get_peaks(oc_max, window_width)
+                    ema_trend = data.check_ema(timeframe=timeframe, shift=local_peaks_index[-1])
+                    if (ema_trend == 'LONG') and (oc_max[-1] <= oc_max[local_peaks_index[-1]]):
+                        peak_time = str(dt.datetime.fromtimestamp(klines['opentime'][local_peaks_index[-1]]/1000, tz))
+                        bullflag_message += f'{pair}  {peak_time}\n'
+                await update.message.reply_text(bullflag_message)
+            except Exception as e:
+                await update.message.reply_text('Error Occurred!\n' + str(e))
+        else:
+            await update.message.reply_text("Sorry, invalid input.\nUsage example: /bullflag 1h")
+
+    async def get_bearflag(self, update, context):
+        msg_text = str(update.message.text).split()
+        if len(msg_text) >= 2:
+            timeframe = msg_text[1].lower()
+            try:
+                watchlist = read_json_file(self.watchlist_path)
+                bearflag_message = f'{timeframe} BearFlag:\n'
+                for pair in watchlist:
+                    data = PairData(pair)
+                    klines = data.get_klines(timeframe)
+                    window_width = Config.MAXMIN_WINDOW_WIDTH
+                    oc_min = data.get_oc_min(timeframe)
+                    oc_min_neg = [-each for each in oc_min]
+                    local_valleys_index = data.get_peaks(oc_min_neg, window_width)
+                    ema_trend = data.check_ema(timeframe=timeframe, shift=local_valleys_index[-1])
+                    if (ema_trend == 'SHORT') and (oc_min[-1] >= oc_min[local_valleys_index[-1]]):
+                        valley_time = str(dt.datetime.fromtimestamp(klines['opentime'][local_valleys_index[-1]]/1000, tz))
+                        bearflag_message += f'{pair}  {valley_time}\n'
+                await update.message.reply_text(bearflag_message)
+            except Exception as e:
+                await update.message.reply_text('Error Occurred!\n' + str(e))
+        else:
+            await update.message.reply_text("Sorry, invalid input.\nUsage example: /bearflag 1h")
+
     async def get_watchlist(self, update, context):
         try:
             watchlist = str(read_json_file(self.watchlist_path))
@@ -138,6 +185,8 @@ class TelegramBot:
         self.application.add_handler(CommandHandler('tp', self.tp_command))
         self.application.add_handler(CommandHandler('hh', self.get_peaks))
         self.application.add_handler(CommandHandler('ll', self.get_valleys))
+        self.application.add_handler(CommandHandler('bull', self.get_bullflag))
+        self.application.add_handler(CommandHandler('bear', self.get_bearflag))
         self.application.add_handler(CommandHandler('getwl', self.get_watchlist))
         self.application.add_handler(CommandHandler('addwl', self.add_watchlist))
         self.application.add_handler(CommandHandler('delwl', self.del_watchlist))

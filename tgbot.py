@@ -97,6 +97,7 @@ class TelegramBot:
             timeframe = msg_text[1].lower()
             try:
                 watchlist = read_json_file(self.watchlist_path)
+                await update.message.reply_text(f'Start checking {len(watchlist)} pairs...')
                 bullflag_message = f'{timeframe} BullFlag:\n'
                 for pair in watchlist:
                     data = PairData(pair)
@@ -106,13 +107,13 @@ class TelegramBot:
                     local_peaks_index = data.get_peaks(oc_max, window_width)
                     ema_trend = data.check_ema(timeframe=timeframe, shift=local_peaks_index[-1])
                     if (ema_trend == 'LONG') and (oc_max[-1] <= oc_max[local_peaks_index[-1]]):
-                        peak_time = str(dt.datetime.fromtimestamp(klines['opentime'][local_peaks_index[-1]]/1000, tz))
+                        peak_time = str(dt.datetime.fromtimestamp(klines['opentime'][local_peaks_index[-1]]/1000, self.tz))
                         bullflag_message += f'{pair}  {peak_time}\n'
                 await update.message.reply_text(bullflag_message)
             except Exception as e:
                 await update.message.reply_text('Error Occurred!\n' + str(e))
         else:
-            await update.message.reply_text("Sorry, invalid input.\nUsage example: /bullflag 1h")
+            await update.message.reply_text("Sorry, invalid input.\nUsage example: /bull 1h")
 
     async def get_bearflag(self, update, context):
         msg_text = str(update.message.text).split()
@@ -120,6 +121,7 @@ class TelegramBot:
             timeframe = msg_text[1].lower()
             try:
                 watchlist = read_json_file(self.watchlist_path)
+                await update.message.reply_text(f'Start checking {len(watchlist)} pairs...')
                 bearflag_message = f'{timeframe} BearFlag:\n'
                 for pair in watchlist:
                     data = PairData(pair)
@@ -130,13 +132,13 @@ class TelegramBot:
                     local_valleys_index = data.get_peaks(oc_min_neg, window_width)
                     ema_trend = data.check_ema(timeframe=timeframe, shift=local_valleys_index[-1])
                     if (ema_trend == 'SHORT') and (oc_min[-1] >= oc_min[local_valleys_index[-1]]):
-                        valley_time = str(dt.datetime.fromtimestamp(klines['opentime'][local_valleys_index[-1]]/1000, tz))
+                        valley_time = str(dt.datetime.fromtimestamp(klines['opentime'][local_valleys_index[-1]]/1000, self.tz))
                         bearflag_message += f'{pair}  {valley_time}\n'
                 await update.message.reply_text(bearflag_message)
             except Exception as e:
                 await update.message.reply_text('Error Occurred!\n' + str(e))
         else:
-            await update.message.reply_text("Sorry, invalid input.\nUsage example: /bearflag 1h")
+            await update.message.reply_text("Sorry, invalid input.\nUsage example: /bear 1h")
 
     async def get_watchlist(self, update, context):
         try:

@@ -54,11 +54,18 @@ def run():
             data = PairData(pair, proxies)
 
             # Data acquisition and preprocessing
-            last_candle_opentime = int(time.time())-(int(time.time())%operate_timeframe_sec)
+            last_candle_opentime = (int(time.time())-(int(time.time())%operate_timeframe_sec)-operate_timeframe_sec)*1000
             klines = data.get_klines(operate_timeframe)
+            retry_count = 0
             while klines['opentime'][-1] != last_candle_opentime:
-                time.sleep(1)
-                klines = data.get_klines(operate_timeframe)
+                if retry_count < 3:
+                    print(str(dt.datetime.fromtimestamp(klines['opentime'][-1]/1000, tz)))
+                    print('Trying to get latest candle...')
+                    time.sleep(3)
+                    klines = data.get_klines(operate_timeframe)
+                    retry_count += 1
+                else:
+                    raise ValueError('Cannot get latest candle...')
             window_width = Config.MAXMIN_WINDOW_WIDTH
             oc_max = data.get_oc_max(operate_timeframe)
             local_peaks_index = data.get_peaks(oc_max, window_width)
@@ -154,3 +161,6 @@ if __name__ == '__main__':
 
     # main function
     run()
+
+    #logging
+    print(dt.datetime.now(tz))

@@ -1,4 +1,5 @@
 import os
+import time
 import pytz
 import asyncio
 import traceback
@@ -53,7 +54,11 @@ def run():
             data = PairData(pair, proxies)
 
             # Data acquisition and preprocessing
+            last_candle_opentime = int(time.time())-(int(time.time())%operate_timeframe_sec)
             klines = data.get_klines(operate_timeframe)
+            while klines['opentime'][-1] != last_candle_opentime:
+                time.sleep(1)
+                klines = data.get_klines(operate_timeframe)
             window_width = Config.MAXMIN_WINDOW_WIDTH
             oc_max = data.get_oc_max(operate_timeframe)
             local_peaks_index = data.get_peaks(oc_max, window_width)

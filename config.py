@@ -15,8 +15,8 @@ class Config:
     SLOW_PERIOD = 120
 
     # timeframe configs
-    SMALL_TIMEFRAME = '1h'
-    LARGE_TIMEFRAME = '4h'
+    SMALL_TIMEFRAME = '15m'
+    LARGE_TIMEFRAME = '1h'
     MAXMIN_WINDOW_WIDTH = 6
 
     # commission and slippage

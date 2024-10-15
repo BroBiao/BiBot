@@ -58,10 +58,11 @@ def run():
             klines = data.get_klines(operate_timeframe)
             retry_count = 0
             while klines['opentime'][-1] != last_candle_opentime:
+                print(str(dt.datetime.fromtimestamp(klines['opentime'][-1]/1000, tz)))
                 if retry_count < 3:
-                    print(str(dt.datetime.fromtimestamp(klines['opentime'][-1]/1000, tz)))
                     print('Trying to get latest candle...')
                     time.sleep(3)
+                    data.del_klines(operate_timeframe)
                     klines = data.get_klines(operate_timeframe)
                     retry_count += 1
                 else:

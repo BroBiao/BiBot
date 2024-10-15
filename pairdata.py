@@ -38,6 +38,14 @@ class PairData(object):
             pass
         return self.klines[timeframe]
 
+    def del_klines(self, timeframe):
+        if not hasattr(self, 'klines'):
+            pass
+        elif (timeframe not in self.klines.keys()):
+            pass
+        else:
+            del self.klines[timeframe]
+
     def get_ema3(self, timeframe, endTime=None, limit=None):
         if hasattr(self, 'ema3') and self.ema3['timeframe'] == timeframe:
             pass

@@ -87,11 +87,12 @@ def run():
 
             # Main Strategy: Bullish/Bearish Flag Strategy
             # Check Bullish Flag & Descending Channel Pattern
-            if local_peaks[-2][1] > local_peaks[-1][1]:
-                flag_message = f'H2: %s  %f\nH1: %s  %f\n' % (
+            if local_peaks[-3][1] > local_peaks[-2][1] > local_peaks[-1][1]:
+                flag_message = f'H3: %s  %f\nH2: %s  %f\nH1: %s  %f\n' % (
+                                str(dt.datetime.fromtimestamp(local_peaks[-3][0]/1000, tz)), local_peaks[-3][1],
                                 str(dt.datetime.fromtimestamp(local_peaks[-2][0]/1000, tz)), local_peaks[-2][1],
                                 str(dt.datetime.fromtimestamp(local_peaks[-1][0]/1000, tz)), local_peaks[-1][1])
-                for i in range(2, len(local_peaks)):
+                for i in range(3, len(local_peaks)):
                     if local_peaks[-i-1][1] > local_peaks[-i][1]:
                         flag_message = f'H{i+1}: %s  %f\n' % (
                             str(dt.datetime.fromtimestamp(local_peaks[-i-1][0]/1000, tz)), local_peaks[-i-1][1]
@@ -100,7 +101,7 @@ def run():
                         break
                 pair_market_url = market_base_url + pair
                 if ((oc_max[-2] < local_peaks[-1][1]) and (oc_max[-1] >= local_peaks[-1][1]) and 
-                    (operate_trend == 'LONG') and (observe_trend != 'SHORT')):
+                    (operate_trend != 'SHORT') and (observe_trend != 'SHORT')):
                     message2send = f'\U0001F42E\U0001F4C8 {pair}\n' + flag_message + pair_market_url
                     send_message(message2send)
                 '''
@@ -118,11 +119,12 @@ def run():
                 '''
 
             # Check Bearish Flag & Ascending Channel Pattern
-            if local_valleys[-2][1] < local_valleys[-1][1]:
-                flag_message = f'L2: %s  %f\nL1: %s  %f\n' % (
+            if local_valleys[-3][1] < local_valleys[-2][1] < local_valleys[-1][1]:
+                flag_message = f'L3: %s  %f\nL2: %s  %f\nL1: %s  %f\n' % (
+                                str(dt.datetime.fromtimestamp(local_valleys[-3][0]/1000, tz)), local_valleys[-3][1],
                                 str(dt.datetime.fromtimestamp(local_valleys[-2][0]/1000, tz)), local_valleys[-2][1],
                                 str(dt.datetime.fromtimestamp(local_valleys[-1][0]/1000, tz)), local_valleys[-1][1])
-                for i in range(2, len(local_valleys)):
+                for i in range(3, len(local_valleys)):
                     if local_valleys[-i-1][1] < local_valleys[-i][1]:
                         flag_message = f'L{i+1}: %s  %f\n' % (
                             str(dt.datetime.fromtimestamp(local_valleys[-i-1][0]/1000, tz)), local_valleys[-i-1][1]
@@ -131,7 +133,7 @@ def run():
                         break
                 pair_market_url = market_base_url + pair
                 if ((oc_min[-2] > local_valleys[-1][1]) and (oc_min[-1] <= local_valleys[-1][1]) and 
-                    (operate_trend == 'SHORT') and (observe_trend != 'LONG')):
+                    (operate_trend != 'LONG') and (observe_trend != 'LONG')):
                     message2send = f'\U0001F43B\U0001F4C9 {pair}\n' + flag_message + pair_market_url
                     send_message(message2send)
                 '''

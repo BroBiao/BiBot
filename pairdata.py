@@ -18,7 +18,7 @@ class PairData(object):
     def get_klines(self, timeframe, endTime=None, limit=None):
         if not hasattr(self, 'klines'):
             self.klines = {}
-        if (timeframe not in self.klines.keys()):
+        if (timeframe not in self.klines.keys()) or (self.klines[timeframe]['opentime'][-1] != endTime):
             url = self.base_url + self.kline_url
             params = {'symbol': self.pair, 'interval': timeframe, 'endTime': endTime, 'limit': limit}
             res = requests.get(url, params=params, proxies=self.proxies)

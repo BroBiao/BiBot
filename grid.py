@@ -1,0 +1,189 @@
+import os
+import time
+import asyncio
+import telegram
+from dotenv import load_dotenv
+from binance.spot import Spot
+from binance.error import ClientError, ServerError
+
+
+# 配置参数
+initialBuyQuantity=0.001
+buyIncrement=0.0001
+sellQuantity=0.001
+priceStep = 1000
+quantityDecimals = 4
+priceDecimals = 2
+baseAsset = 'BTC'
+quoteAsset = 'USDT'
+pair = baseAsset + quoteAsset
+numOrders = 3
+
+# 初始化 Binance API 客户端
+load_dotenv()
+api_key = os.getenv('API_KEY')
+api_secret = os.getenv('API_SECRET')
+client = Spot(api_key, api_secret)
+
+# 初始化Telegram Bot
+bot_token = os.getenv('BOT_TOKEN')
+chat_id = os.getenv('CHAT_ID')
+bot = telegram.Bot(bot_token)
+loop = asyncio.get_event_loop()
+
+# 辅助变量
+fund_warn_count = 0
+buy_orders = []
+sell_orders = []
+
+def send_message(message):
+    '''
+    发送信息到Telegram
+    '''
+    print(message)  # 输出到日志
+    loop.run_until_complete(bot.send_message(chat_id=chat_id, text=message))
+
+def format_price(price):
+    """价格抹零，格式化为1000的整数倍"""
+    return int(float(price) // 1000 * 1000)
+
+def get_balance(asset):
+    """获取资产余额"""
+    account_info = client.account()
+    balance = next((b['free'] for b in account_info['balances'] if b['asset'] == asset), 0.0)
+    return float(balance)
+
+def get_last_trade(symbol):
+    """获取最新成交订单信息"""
+    my_trades = client.my_trades(symbol)
+    return my_trades[-1]
+
+def wait_asset_unlock(attempts=3, wait_time=3):
+    """检查是否所有挂单已取消，资金解锁"""
+    for attempt in range(attempts):
+        account_info = client.account()
+        locked_base_asset = next((b['locked'] for b in account_info['balances'] if b['asset'] == baseAsset), None)
+        locked_quote_asset = next((b['locked'] for b in account_info['balances'] if b['asset'] == quoteAsset), None)
+        if float(locked_base_asset) == 0.0 and float(locked_quote_asset) == 0.0:  # 如果锁定资金均为0，则返回 True
+            return True
+        else:
+            if attempt < attempts - 1:
+                print(f"资金尚未全部解锁，等待{wait_time}秒再检查... (尝试 {attempt + 1}/{attempts})")
+                time.sleep(wait_time)
+    # 仍未解锁
+    print("资金未能全部解锁，退出程序。")
+    return False
+
+def place_order(side, quantity, price):
+    """挂单函数"""
+    try:
+        order = client.new_order(
+            symbol=pair,
+            side=side,
+            type='LIMIT',
+            timeInForce='GTC',
+            quantity=round(quantity, quantityDecimals),
+            price=round(price, priceDecimals)
+        )
+        return order
+    except ClientError as e:
+        send_message(f"挂单失败!\nerror_code: {e.error_code}\nerror_message: {e.error_message}")
+        return None
+    except ServerError as e:
+        send_message(f"挂单服务器错误！\n{e.message}")
+        return None
+
+def update_orders(current_price):
+    """检查并更新买卖挂单，保持每侧 3 个挂单"""
+    global fund_warn_count, buy_orders, sell_orders
+
+    # 取消现有挂单
+    for order in buy_orders + sell_orders:
+        order_info = client.get_order(symbol=pair, orderId=int(order))
+        if order_info['status'] == 'FILLED':
+            executed_qty = round(float(order_info['executedQty']), quantityDecimals)
+            executed_price = round(float(order_info['price']), priceDecimals)
+            send_message(f"{order_info['side']} {executed_qty}{baseAsset} at {executed_price}")
+    if client.get_open_orders(symbol=pair):    # 如果有挂单，全部取消
+        client.cancel_open_orders(symbol=pair)
+
+    # 检查挂单是否全部取消成功，资金是否全部解锁
+    if not wait_asset_unlock():
+        send_message("资金未能全部解锁，放弃创建新挂单")
+        return
+
+    buy_orders.clear()
+    sell_orders.clear()
+
+    base_balance = get_balance(baseAsset)
+    quote_balance = get_balance(quoteAsset)
+
+    last_trade = get_last_trade(pair)
+    last_trade_price = float(last_trade['price'])
+    last_trade_qty = float(last_trade['qty'])
+    last_trade_side = 'BUY' if last_trade['isBuyer'] else 'SELL'
+    if base_balance >= sellQuantity:
+        refer_price = format_price(last_trade_price)
+    else:
+        refer_price = format_price(current_price)
+    if last_trade_side == 'BUY':
+        initial_buy_qty = last_trade_qty + buyIncrement
+    else:
+        initial_buy_qty = initialBuyQuantity
+
+
+    # 买单：往下挂 1000 整数倍的价格
+    for i in range(numOrders):
+        buy_price = round(refer_price - (i + 1) * priceStep, priceDecimals)
+        buy_qty = round(initial_buy_qty + i * buyIncrement, quantityDecimals)
+        if quote_balance < buy_price * buy_qty:
+            if (fund_warn_count % 60) == 0:
+                send_message(f"{quoteAsset}资金不足，无法在{buy_price}买入{buy_qty}{baseAsset}")
+            fund_warn_count += 1
+            break
+        order = place_order('BUY', buy_qty, buy_price)
+        if order:
+            buy_orders.append(order['orderId'])
+        if i == (numOrders - 1):
+            fund_warn_count = 0
+
+    # 卖单：往上挂 1000 整数倍的价格
+    for i in range(numOrders):
+        sell_price = round(refer_price + (i + 1) * priceStep, priceDecimals)
+        if (base_balance - i * sellQuantity) < sellQuantity:
+            print(f"{baseAsset}余额不足，无法在{sell_price}挂卖单")
+            break
+        order = place_order('SELL', sellQuantity, sell_price)
+        if order:
+            sell_orders.append(order['orderId'])
+
+def main():
+    """主程序：实时更新价格，执行网格交易"""
+    send_message('程序启动')
+    while True:
+        try:
+            # 获取最新价格
+            current_price = float(client.ticker_price(symbol=pair)['price'])
+            print(f"最新价格: {current_price}")
+
+            # 更新挂单
+            update_orders(current_price)
+
+            # 间隔 60 秒更新价格
+            time.sleep(60)
+
+        except ClientError as e:
+            if e.status_code == 429:
+                send_message("达到API速率限制，程序暂停10分钟")
+                time.sleep(600)
+            elif e.status_code == 418:
+                send_message("超出API速率限制，IP被封禁，程序暂停30分钟")
+                time.sleep(1800)
+            else:
+                send_message(f"API客户端错误\nerror_code: {e.error_code}\nerror_message: {e.error_message}")
+        except Exception as e:
+            send_message(f"一般错误: {str(e)}")
+            time.sleep(5)  # 发生其他错误后短暂暂停再重试
+
+if __name__ == "__main__":
+    main()

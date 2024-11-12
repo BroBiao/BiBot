@@ -58,7 +58,7 @@ def get_last_trade(symbol):
     my_trades = client.my_trades(symbol)
     return my_trades[-1]
 
-def wait_asset_unlock(attempts=3, wait_time=3):
+def wait_asset_unlock(attempts=5, wait_time=3):
     """检查是否所有挂单已取消，资金解锁"""
     for attempt in range(attempts):
         account_info = client.account()
@@ -125,7 +125,7 @@ def update_orders(current_price):
     if base_balance >= sellQuantity:
         refer_price = format_price(last_trade_price)
     else:
-        refer_price = format_price(current_price)
+        refer_price = max(format_price(last_trade_price), format_price(current_price))
     if last_trade_side == 'BUY':
         initial_buy_qty = last_trade_qty + buyIncrement
     else:

@@ -35,6 +35,7 @@ loop = asyncio.get_event_loop()
 fund_warn_count = 0
 buy_orders = []
 sell_orders = []
+last_highest_open_price = 0
 
 def send_message(message):
     '''
@@ -95,7 +96,7 @@ def place_order(side, quantity, price):
 
 def update_orders(current_price):
     """检查并更新买卖挂单，保持每侧 3 个挂单"""
-    global fund_warn_count, buy_orders, sell_orders
+    global fund_warn_count, buy_orders, sell_orders, last_highest_open_price
 
     # 取消现有挂单
     for order in buy_orders + sell_orders:
@@ -107,7 +108,7 @@ def update_orders(current_price):
     if client.get_open_orders(symbol=pair):    # 如果有挂单，全部取消
         client.cancel_open_orders(symbol=pair)
 
-    # 检查挂单是否全部取消成功，资金是否全部解锁
+    # 检查挂单是否全部取消成功
     if not wait_asset_unlock():
         send_message("资金未能全部解锁，放弃创建新挂单")
         return
@@ -125,12 +126,14 @@ def update_orders(current_price):
     if base_balance >= sellQuantity:
         refer_price = format_price(last_trade_price)
     else:
-        refer_price = max(format_price(last_trade_price), format_price(current_price))
+        refer_price = max(format_price(last_highest_open_price + priceStep), format_price(current_price))
     if last_trade_side == 'BUY':
         initial_buy_qty = last_trade_qty + buyIncrement
     else:
         initial_buy_qty = initialBuyQuantity
 
+    # 记录最高买单价
+    last_highest_open_price = round(refer_price - priceStep, priceDecimals)
 
     # 买单：往下挂 1000 整数倍的价格
     for i in range(numOrders):

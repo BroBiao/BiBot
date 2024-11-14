@@ -98,17 +98,29 @@ def update_orders(current_price):
     """检查并更新买卖挂单，保持每侧 3 个挂单"""
     global fund_warn_count, buy_orders, sell_orders, last_highest_open_price
 
-    # 取消现有挂单
+    # 取消全部挂单
+    if client.get_open_orders(symbol=pair):
+        client.cancel_open_orders(symbol=pair)
+
+    # 检查挂单成交情况
     for order in buy_orders + sell_orders:
         order_info = client.get_order(symbol=pair, orderId=int(order))
         if order_info['status'] == 'FILLED':
             executed_qty = round(float(order_info['executedQty']), quantityDecimals)
             executed_price = round(float(order_info['price']), priceDecimals)
             send_message(f"{order_info['side']} {executed_qty}{baseAsset} at {executed_price}")
-    if client.get_open_orders(symbol=pair):    # 如果有挂单，全部取消
-        client.cancel_open_orders(symbol=pair)
 
-    # 检查挂单是否全部取消成功，资金是否全部解锁
+    # 检查挂单是否全部取消
+    elapsed_time = 0
+    while (elapsed_time < 10) and (len(client.get_open_orders(symbol=pair)) > 0):
+        print("取消全部挂单未完成，等待中...")
+        time.sleep(1)
+        elapsed_time += 1
+    if elapsed_time == 10:
+        send_message("取消挂单失败，放弃创建新挂单")
+        return
+
+    #资金是否全部解锁
     if not wait_asset_unlock():
         send_message("资金未能全部解锁，放弃创建新挂单")
         return

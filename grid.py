@@ -108,7 +108,7 @@ def update_orders(current_price):
     if client.get_open_orders(symbol=pair):    # 如果有挂单，全部取消
         client.cancel_open_orders(symbol=pair)
 
-    # 检查挂单是否全部取消成功
+    # 检查挂单是否全部取消成功，资金是否全部解锁
     if not wait_asset_unlock():
         send_message("资金未能全部解锁，放弃创建新挂单")
         return
@@ -141,24 +141,28 @@ def update_orders(current_price):
         buy_qty = round(initial_buy_qty + i * buyIncrement, quantityDecimals)
         if quote_balance < buy_price * buy_qty:
             if (fund_warn_count % 60) == 0:
-                send_message(f"{quoteAsset}资金不足，无法在{buy_price}买入{buy_qty}{baseAsset}")
+                send_message(f"{quoteAsset}余额: {quote_balance}，无法在{buy_price}买入{buy_qty}{baseAsset}")
             fund_warn_count += 1
             break
         order = place_order('BUY', buy_qty, buy_price)
         if order:
+            print(f'在{buy_price}买入{buy_qty}{baseAsset}挂单成功')
             buy_orders.append(order['orderId'])
+            quote_balance -= buy_qty
         if i == (numOrders - 1):
             fund_warn_count = 0
 
     # 卖单：往上挂 1000 整数倍的价格
     for i in range(numOrders):
         sell_price = round(refer_price + (i + 1) * priceStep, priceDecimals)
-        if (base_balance - i * sellQuantity) < sellQuantity:
-            print(f"{baseAsset}余额不足，无法在{sell_price}挂卖单")
+        if base_balance < sellQuantity:
+            print(f"{baseAsset}余额: {base_balance}，无法在{sell_price}卖出{sellQuantity}{baseAsset}")
             break
         order = place_order('SELL', sellQuantity, sell_price)
         if order:
+            print(f'在{sell_price}卖出{sellQuantity}{baseAsset}挂单成功')
             sell_orders.append(order['orderId'])
+            base_balance -= sellQuantity
 
 def main():
     """主程序：实时更新价格，执行网格交易"""

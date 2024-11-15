@@ -1,7 +1,9 @@
 import os
 import time
+import math
 import asyncio
 import telegram
+import traceback
 from dotenv import load_dotenv
 from binance.spot import Spot
 from binance.error import ClientError, ServerError
@@ -48,24 +50,28 @@ def format_price(price):
     """价格抹零，格式化为1000的整数倍"""
     return int(float(price) // 1000 * 1000)
 
-def get_balance(asset):
+def get_balance():
     """获取资产余额"""
+    balance = {}
     account_info = client.account()
-    balance = next((b['free'] for b in account_info['balances'] if b['asset'] == asset), 0.0)
-    return float(balance)
+    for each in account_info['balances']:
+        if each['asset'] in [baseAsset, quoteAsset]:
+            balance[each['asset']] = {'free': float(each['free']), 'locked': float(each['locked'])}
+    return balance
 
 def get_last_trade(symbol):
     """获取最新成交订单信息"""
     my_trades = client.my_trades(symbol)
     return my_trades[-1]
 
-def wait_asset_unlock(attempts=5, wait_time=3):
+def wait_asset_unlock(base_balance, quote_balance, attempts=15, wait_time=1):
     """检查是否所有挂单已取消，资金解锁"""
     for attempt in range(attempts):
-        account_info = client.account()
-        locked_base_asset = next((b['locked'] for b in account_info['balances'] if b['asset'] == baseAsset), None)
-        locked_quote_asset = next((b['locked'] for b in account_info['balances'] if b['asset'] == quoteAsset), None)
-        if float(locked_base_asset) == 0.0 and float(locked_quote_asset) == 0.0:  # 如果锁定资金均为0，则返回 True
+        balance = get_balance()
+        base_free_balance = balance[baseAsset]['free']
+        quote_free_balance = balance[quoteAsset]['free']
+        if (math.isclose(base_free_balance, base_balance, abs_tol=1e-9) and 
+            math.isclose(quote_free_balance, quote_balance, abs_tol=1e-9)):
             return True
         else:
             if attempt < attempts - 1:
@@ -98,38 +104,32 @@ def update_orders(current_price):
     """检查并更新买卖挂单，保持每侧 3 个挂单"""
     global fund_warn_count, buy_orders, sell_orders, last_highest_open_price
 
+    # 获取余额
+    balance = get_balance()
+    base_balance = balance[baseAsset]['free'] + balance[baseAsset]['locked']
+    quote_balance = balance[quoteAsset]['free'] + balance[quoteAsset]['locked']
+
     # 取消全部挂单
-    if client.get_open_orders(symbol=pair):
+    open_orders = client.get_open_orders(symbol=pair)
+    open_orders = [order['orderId'] for order in open_orders]
+    if open_orders:
         client.cancel_open_orders(symbol=pair)
 
-    # 检查挂单成交情况
-    for order in buy_orders + sell_orders:
+    # 检查消失的挂单是否成交
+    for order in (set(buy_orders + sell_orders) - set(open_orders)):
         order_info = client.get_order(symbol=pair, orderId=int(order))
         if order_info['status'] == 'FILLED':
             executed_qty = round(float(order_info['executedQty']), quantityDecimals)
             executed_price = round(float(order_info['price']), priceDecimals)
             send_message(f"{order_info['side']} {executed_qty}{baseAsset} at {executed_price}")
 
-    # 检查挂单是否全部取消
-    elapsed_time = 0
-    while (elapsed_time < 10) and (len(client.get_open_orders(symbol=pair)) > 0):
-        print("取消全部挂单未完成，等待中...")
-        time.sleep(1)
-        elapsed_time += 1
-    if elapsed_time == 10:
-        send_message("取消挂单失败，放弃创建新挂单")
-        return
-
-    #资金是否全部解锁
-    if not wait_asset_unlock():
+    # 资金是否全部解锁
+    if not wait_asset_unlock(base_balance, quote_balance):
         send_message("资金未能全部解锁，放弃创建新挂单")
         return
 
     buy_orders.clear()
     sell_orders.clear()
-
-    base_balance = get_balance(baseAsset)
-    quote_balance = get_balance(quoteAsset)
 
     last_trade = get_last_trade(pair)
     last_trade_price = float(last_trade['price'])
@@ -160,7 +160,7 @@ def update_orders(current_price):
         if order:
             print(f'在{buy_price}买入{buy_qty}{baseAsset}挂单成功')
             buy_orders.append(order['orderId'])
-            quote_balance -= buy_qty
+            quote_balance -= (buy_price * buy_qty)
         if i == (numOrders - 1):
             fund_warn_count = 0
 
@@ -201,6 +201,7 @@ def main():
             else:
                 send_message(f"API客户端错误\nerror_code: {e.error_code}\nerror_message: {e.error_message}")
         except Exception as e:
+            traceback.print_exc()
             send_message(f"一般错误: {str(e)}")
             time.sleep(5)  # 发生其他错误后短暂暂停再重试
 

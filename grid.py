@@ -11,7 +11,7 @@ from binance.error import ClientError, ServerError
 
 # 配置参数
 initialBuyQuantity=0.001
-buyIncrement=0.0001
+buyIncrement=0.0002
 sellQuantity=0.001
 priceStep = 1000
 quantityDecimals = 4
@@ -109,14 +109,21 @@ def update_orders(current_price):
     base_balance = balance[baseAsset]['free'] + balance[baseAsset]['locked']
     quote_balance = balance[quoteAsset]['free'] + balance[quoteAsset]['locked']
 
-    # 取消全部挂单
+    # 检查是否有挂单成交
     open_orders = client.get_open_orders(symbol=pair)
     open_orders = [order['orderId'] for order in open_orders]
-    if open_orders:
+    filled_orders = set(buy_orders + sell_orders) - set(open_orders)
+    if (buy_orders or sell_orders) and (not filled_orders):
+        print('没有挂单成交，等待...')
+        return
+    elif open_orders:
+        # 取消剩余挂单
         client.cancel_open_orders(symbol=pair)
+    else:
+        pass
 
-    # 检查消失的挂单是否成交
-    for order in (set(buy_orders + sell_orders) - set(open_orders)):
+    # 确认消失的挂单是否成交
+    for order in filled_orders:
         order_info = client.get_order(symbol=pair, orderId=int(order))
         if order_info['status'] == 'FILLED':
             executed_qty = round(float(order_info['executedQty']), quantityDecimals)

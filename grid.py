@@ -108,10 +108,14 @@ def update_orders(current_price):
     base_balance = balance[baseAsset]['free'] + balance[baseAsset]['locked']
     quote_balance = balance[quoteAsset]['free'] + balance[quoteAsset]['locked']
 
+    # 获取最近一笔成交信息备用
+    last_trade = get_last_trade(pair)
+
     # 检查是否有挂单成交
     open_orders = client.get_open_orders(symbol=pair)
     open_orders = [order['orderId'] for order in open_orders]
     filled_orders = set(buy_orders + sell_orders) - set(open_orders)
+    # 没有订单成交，分情况处理
     if not filled_orders:
         # 双边均有挂单
         if buy_orders and sell_orders:
@@ -120,20 +124,23 @@ def update_orders(current_price):
         # 只有买单一侧有挂单
         elif buy_orders and (not sell_orders):
             if current_price >= (last_refer_price + priceStep):
-                pass
+                refer_price = format_price(last_refer_price + priceStep)
             else:
                 print('等待挂单成交...')
                 return
         # 只有卖单一侧有挂单
         elif (not buy_orders) and sell_orders:
             if current_price <= (last_refer_price - priceStep):
-                pass
+                refer_price = format_price(last_refer_price - priceStep)
             else:
                 print('等待挂单成交...')
                 return
         # 买卖两侧均无挂单（程序首次启动）
         else:
-            pass
+            refer_price = format_price(float(last_trade['price']))
+    # 有订单成交
+    else:
+        refer_price = format_price(float(last_trade['price']))
 
     if open_orders:
         # 取消所有挂单
@@ -155,22 +162,12 @@ def update_orders(current_price):
     buy_orders.clear()
     sell_orders.clear()
 
-    last_trade = get_last_trade(pair)
-    last_trade_price = float(last_trade['price'])
     last_trade_qty = float(last_trade['qty'])
     last_trade_side = 'BUY' if last_trade['isBuyer'] else 'SELL'
-    if base_balance >= sellQuantity:
-        refer_price = format_price(last_trade_price)
-    else:
-        refer_price = max(format_price(last_trade_price), format_price(last_refer_price), 
-                          format_price(current_price))
     if last_trade_side == 'BUY':
         initial_buy_qty = last_trade_qty + buyIncrement
     else:
         initial_buy_qty = initialBuyQuantity
-
-    # 记录参考价
-    last_refer_price = round(refer_price, priceDecimals)
 
     # 买单：往下挂 1000 整数倍的价格
     for i in range(numOrders):
@@ -196,6 +193,9 @@ def update_orders(current_price):
             print(f'在{sell_price}卖出{sellQuantity}{baseAsset}挂单成功')
             sell_orders.append(order['orderId'])
             base_balance -= sellQuantity
+
+    # 记录参考价
+    last_refer_price = round(refer_price, priceDecimals)
 
 def main():
     """主程序：实时更新价格，执行网格交易"""

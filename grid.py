@@ -34,10 +34,9 @@ bot = telegram.Bot(bot_token)
 loop = asyncio.get_event_loop()
 
 # 辅助变量
-fund_warn_count = 0
 buy_orders = []
 sell_orders = []
-last_highest_open_price = 0
+last_refer_price = 0
 
 def send_message(message):
     '''
@@ -102,7 +101,7 @@ def place_order(side, quantity, price):
 
 def update_orders(current_price):
     """检查并更新买卖挂单，保持每侧 3 个挂单"""
-    global fund_warn_count, buy_orders, sell_orders, last_highest_open_price
+    global buy_orders, sell_orders, last_refer_price
 
     # 获取余额
     balance = get_balance()
@@ -113,14 +112,32 @@ def update_orders(current_price):
     open_orders = client.get_open_orders(symbol=pair)
     open_orders = [order['orderId'] for order in open_orders]
     filled_orders = set(buy_orders + sell_orders) - set(open_orders)
-    if (buy_orders and sell_orders) and (not filled_orders):
-        print('没有挂单成交，等待...')
-        return
-    elif open_orders:
-        # 取消剩余挂单
+    if not filled_orders:
+        # 双边均有挂单
+        if buy_orders and sell_orders:
+            print('等待挂单成交...')
+            return
+        # 只有买单一侧有挂单
+        elif buy_orders and (not sell_orders):
+            if current_price >= (last_refer_price + priceStep):
+                pass
+            else:
+                print('等待挂单成交...')
+                return
+        # 只有卖单一侧有挂单
+        elif (not buy_orders) and sell_orders:
+            if current_price <= (last_refer_price - priceStep):
+                pass
+            else:
+                print('等待挂单成交...')
+                return
+        # 买卖两侧均无挂单（程序首次启动）
+        else:
+            pass
+
+    if open_orders:
+        # 取消所有挂单
         client.cancel_open_orders(symbol=pair)
-    else:
-        pass
 
     # 确认消失的挂单是否成交
     for order in filled_orders:
@@ -145,31 +162,28 @@ def update_orders(current_price):
     if base_balance >= sellQuantity:
         refer_price = format_price(last_trade_price)
     else:
-        refer_price = max(format_price(last_highest_open_price + priceStep), format_price(current_price))
+        refer_price = max(format_price(last_trade_price), format_price(last_refer_price), 
+                          format_price(current_price))
     if last_trade_side == 'BUY':
         initial_buy_qty = last_trade_qty + buyIncrement
     else:
         initial_buy_qty = initialBuyQuantity
 
-    # 记录最高买单价
-    last_highest_open_price = round(refer_price - priceStep, priceDecimals)
+    # 记录参考价
+    last_refer_price = round(refer_price, priceDecimals)
 
     # 买单：往下挂 1000 整数倍的价格
     for i in range(numOrders):
         buy_price = round(refer_price - (i + 1) * priceStep, priceDecimals)
         buy_qty = round(initial_buy_qty + i * buyIncrement, quantityDecimals)
         if quote_balance < buy_price * buy_qty:
-            if (fund_warn_count % 60) == 0:
-                send_message(f"{quoteAsset}余额: {quote_balance}，无法在{buy_price}买入{buy_qty}{baseAsset}")
-            fund_warn_count += 1
+            send_message(f"{quoteAsset}余额: {quote_balance}，无法在{buy_price}买入{buy_qty}{baseAsset}")
             break
         order = place_order('BUY', buy_qty, buy_price)
         if order:
             print(f'在{buy_price}买入{buy_qty}{baseAsset}挂单成功')
             buy_orders.append(order['orderId'])
             quote_balance -= (buy_price * buy_qty)
-        if i == (numOrders - 1):
-            fund_warn_count = 0
 
     # 卖单：往上挂 1000 整数倍的价格
     for i in range(numOrders):
@@ -195,8 +209,8 @@ def main():
             # 更新挂单
             update_orders(current_price)
 
-            # 间隔 60 秒更新价格
-            time.sleep(60)
+            # 间隔 5 秒更新价格
+            time.sleep(5)
 
         except ClientError as e:
             if e.status_code == 429:

@@ -113,7 +113,7 @@ def update_orders(current_price):
     open_orders = client.get_open_orders(symbol=pair)
     open_orders = [order['orderId'] for order in open_orders]
     filled_orders = set(buy_orders + sell_orders) - set(open_orders)
-    if (buy_orders or sell_orders) and (not filled_orders):
+    if (buy_orders and sell_orders) and (not filled_orders):
         print('没有挂单成交，等待...')
         return
     elif open_orders:
@@ -185,7 +185,7 @@ def update_orders(current_price):
 
 def main():
     """主程序：实时更新价格，执行网格交易"""
-    send_message('程序启动')
+    # send_message('程序启动')
     while True:
         try:
             # 获取最新价格

@@ -141,7 +141,7 @@ def update_orders(current_price):
         refer_price = format_price(float(last_trade['price']))
 
     # 参考价格未改变，说明最后一笔成交信息还未进入数据库，获取到了前一次成交
-    if refer_price == last_refer_price:
+    if int(refer_price) == int(last_refer_price):
         print('未能获取最后一笔成交信息，等待数据库更新...')
         return
 

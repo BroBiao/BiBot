@@ -108,13 +108,12 @@ def update_orders(current_price):
     base_balance = balance[baseAsset]['free'] + balance[baseAsset]['locked']
     quote_balance = balance[quoteAsset]['free'] + balance[quoteAsset]['locked']
 
-    # 获取最近一笔成交信息备用
-    last_trade = get_last_trade(pair)
-
     # 检查是否有挂单成交
     open_orders = client.get_open_orders(symbol=pair)
     open_orders = [order['orderId'] for order in open_orders]
     filled_orders = set(buy_orders + sell_orders) - set(open_orders)
+    # 获取最近一笔成交信息备用
+    last_trade = get_last_trade(pair)
     # 没有订单成交，分情况处理
     if not filled_orders:
         # 双边均有挂单

@@ -112,10 +112,12 @@ def update_orders(current_price):
     open_orders = client.get_open_orders(symbol=pair)
     open_orders = [order['orderId'] for order in open_orders]
     filled_orders = set(buy_orders + sell_orders) - set(open_orders)
-    # 获取最近一笔成交信息备用
+
+    # 获取最近一笔成交信息
     last_trade = get_last_trade(pair)
-    # 没有订单成交，分情况处理
-    if not filled_orders:
+
+    # 有挂单无成交，分情况处理
+    if (buy_orders or sell_orders) and (not filled_orders):
         # 双边均有挂单
         if buy_orders and sell_orders:
             print('等待挂单成交...')
@@ -134,12 +136,14 @@ def update_orders(current_price):
             else:
                 print('等待挂单成交...')
                 return
-        # 买卖两侧均无挂单（程序首次启动）
-        else:
-            refer_price = format_price(float(last_trade['price']))
-    # 有订单成交
+    # 有订单成交或无挂单(程序首次启动)
     else:
         refer_price = format_price(float(last_trade['price']))
+
+    # 参考价格未改变，说明最后一笔成交信息还未进入数据库，获取到了前一次成交
+    if refer_price == last_refer_price:
+        print('未能获取最后一笔成交信息，等待数据库更新...')
+        return
 
     if open_orders:
         # 取消所有挂单

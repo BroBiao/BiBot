@@ -113,10 +113,12 @@ def update_orders(current_price):
     open_orders = [order['orderId'] for order in open_orders]
     filled_orders = set(buy_orders + sell_orders) - set(open_orders)
 
-    # 获取最近一笔成交信息
+    # 获取最后一笔成交信息作为初始数据
     last_trade = get_last_trade(pair)
+    last_trade_side = 'BUY' if last_trade['isBuyer'] else 'SELL'
+    last_trade_qty = float(last_trade['qty'])
 
-    # 有挂单无成交，分情况处理
+    # 挂单没有减少，分情况处理
     if (buy_orders or sell_orders) and (not filled_orders):
         # 双边均有挂单
         if buy_orders and sell_orders:
@@ -136,26 +138,26 @@ def update_orders(current_price):
             else:
                 print('等待挂单成交...')
                 return
-    # 有订单成交或无挂单(程序首次启动)
+    # 挂单减少(成交或取消)或无挂单(程序首次启动)
     else:
-        refer_price = format_price(float(last_trade['price']))
+        # 确认消失的挂单是否成交
+        filled_flag = False
+        for order in filled_orders:
+            order_info = client.get_order(symbol=pair, orderId=int(order))
+            # 确认成交，使用最新成交订单的数据
+            if order_info['status'] == 'FILLED':
+                filled_flag = True
+                last_trade_side = order_info['side']
+                last_trade_qty = round(float(order_info['executedQty']), quantityDecimals)
+                refer_price = format_price(order_info['price'])
+                send_message(f"{last_trade_side} {last_trade_qty}{baseAsset} at {refer_price}")
+        # 消失的挂单未成交(比如被取消)，使用最后一次成交的数据
+        if filled_flag == False:
+            refer_price = format_price(last_trade['price'])
 
-    # 参考价格未改变，说明最后一笔成交信息还未进入数据库，获取到了前一次成交
-    if int(refer_price) == int(last_refer_price):
-        print('未能获取最后一笔成交信息，等待数据库更新...')
-        return
-
+    # 取消剩余挂单
     if open_orders:
-        # 取消所有挂单
         client.cancel_open_orders(symbol=pair)
-
-    # 确认消失的挂单是否成交
-    for order in filled_orders:
-        order_info = client.get_order(symbol=pair, orderId=int(order))
-        if order_info['status'] == 'FILLED':
-            executed_qty = round(float(order_info['executedQty']), quantityDecimals)
-            executed_price = round(float(order_info['price']), priceDecimals)
-            send_message(f"{order_info['side']} {executed_qty}{baseAsset} at {executed_price}")
 
     # 资金是否全部解锁
     if not wait_asset_unlock(base_balance, quote_balance):
@@ -165,8 +167,6 @@ def update_orders(current_price):
     buy_orders.clear()
     sell_orders.clear()
 
-    last_trade_qty = float(last_trade['qty'])
-    last_trade_side = 'BUY' if last_trade['isBuyer'] else 'SELL'
     if last_trade_side == 'BUY':
         initial_buy_qty = last_trade_qty + buyIncrement
     else:

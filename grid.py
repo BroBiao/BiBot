@@ -63,7 +63,7 @@ def get_last_trade(symbol):
     my_trades = client.my_trades(symbol)
     return my_trades[-1]
 
-def wait_asset_unlock(base_balance, quote_balance, attempts=15, wait_time=1):
+def wait_asset_unlock(base_balance, quote_balance, attempts=5, wait_time=1):
     """检查是否所有挂单已取消，资金解锁"""
     for attempt in range(attempts):
         balance = get_balance()
@@ -212,8 +212,8 @@ def main():
             # 更新挂单
             update_orders(current_price)
 
-            # 间隔 5 秒更新价格
-            time.sleep(5)
+            # 间隔 3 秒更新价格
+            time.sleep(3)
 
         except ClientError as e:
             if e.status_code == 429:

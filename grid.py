@@ -17,7 +17,7 @@ priceStep = 1000
 quantityDecimals = 4
 priceDecimals = 2
 baseAsset = 'BTC'
-quoteAsset = 'USDT'
+quoteAsset = 'FDUSD'
 pair = baseAsset + quoteAsset
 numOrders = 3
 
@@ -142,6 +142,7 @@ def update_orders(current_price):
     else:
         # 确认消失的挂单是否成交
         filled_flag = False
+        filled_message = ''
         for order in filled_orders:
             order_info = client.get_order(symbol=pair, orderId=int(order))
             # 确认成交，使用最新成交订单的数据
@@ -150,7 +151,7 @@ def update_orders(current_price):
                 last_trade_side = order_info['side']
                 last_trade_qty = round(float(order_info['executedQty']), quantityDecimals)
                 refer_price = format_price(order_info['price'])
-                send_message(f"{last_trade_side} {last_trade_qty}{baseAsset} at {refer_price}")
+                filled_message += f"{last_trade_side} {last_trade_qty}{baseAsset} at {refer_price}"
         # 消失的挂单未成交(比如被取消)，使用最后一次成交的数据
         if filled_flag == False:
             refer_price = format_price(last_trade['price'])
@@ -163,6 +164,9 @@ def update_orders(current_price):
     if not wait_asset_unlock(base_balance, quote_balance):
         send_message("资金未能全部解锁，放弃创建新挂单")
         return
+
+    if filled_flag:
+        send_message(filled_message)
 
     buy_orders.clear()
     sell_orders.clear()

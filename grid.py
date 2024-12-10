@@ -157,7 +157,7 @@ def update_orders(current_price):
                 filled_trade_qty = round(float(order_info['executedQty']), quantityDecimals)
                 filled_trade_price = order_info['price']
                 filled_message += f"{filled_trade_side} {filled_trade_qty}{baseAsset} at {filled_trade_price}"
-                if filled_trade_side == 'BUY'
+                if filled_trade_side == 'BUY':
                     refer_price = (last_refer_price - priceStep)
                 else:
                     refer_price = (last_refer_price + priceStep)
@@ -181,7 +181,7 @@ def update_orders(current_price):
         return
 
     # 发送成交信息
-    if filled_flag:
+    if filled_orders and filled_flag:
         send_message(filled_message)
 
     buy_orders.clear()

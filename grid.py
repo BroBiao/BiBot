@@ -20,6 +20,7 @@ baseAsset = 'BTC'
 quoteAsset = 'FDUSD'
 pair = baseAsset + quoteAsset
 numOrders = 3
+dryRun = False
 
 # 初始化 Binance API 客户端
 load_dotenv()
@@ -43,7 +44,8 @@ def send_message(message):
     发送信息到Telegram
     '''
     print(message)  # 输出到日志
-    loop.run_until_complete(bot.send_message(chat_id=chat_id, text=message))
+    if not dryRun:
+        loop.run_until_complete(bot.send_message(chat_id=chat_id, text=message))
 
 def format_price(price):
     """价格抹零，格式化为priceStep的整数倍"""
@@ -197,6 +199,9 @@ def update_orders(current_price):
         if quote_balance < buy_price * buy_qty:
             send_message(f"{quoteAsset}余额: {quote_balance}，无法在{buy_price}买入{buy_qty}{baseAsset}")
             break
+        if dryRun:
+            print(f'在{buy_price}买入{buy_qty}{baseAsset}挂单成功')
+            continue
         order = place_order('BUY', buy_qty, buy_price)
         if order:
             print(f'在{buy_price}买入{buy_qty}{baseAsset}挂单成功')
@@ -209,6 +214,9 @@ def update_orders(current_price):
         if base_balance < sellQuantity:
             print(f"{baseAsset}余额: {base_balance}，无法在{sell_price}卖出{sellQuantity}{baseAsset}")
             break
+        if dryRun:
+            print(f'在{sell_price}卖出{sellQuantity}{baseAsset}挂单成功')
+            continue
         order = place_order('SELL', sellQuantity, sell_price)
         if order:
             print(f'在{sell_price}卖出{sellQuantity}{baseAsset}挂单成功')

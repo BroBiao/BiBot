@@ -10,16 +10,16 @@ from binance.error import ClientError, ServerError
 
 
 # 配置参数
-initialBuyQuantity=0.001
-buyIncrement=0.0002
-sellQuantity=0.001
-priceStep = 1000
-quantityDecimals = 4
-priceDecimals = 2
-baseAsset = 'BTC'
+initialBuyQuantity=0.1
+buyIncrement=0.01
+sellQuantity=0.1
+priceStep = 10
+quantityDecimals = 2
+priceDecimals = 1
+baseAsset = 'BCH'
 quoteAsset = 'FDUSD'
 pair = baseAsset + quoteAsset
-numOrders = 3
+numOrders = 4
 dryRun = False
 
 # 初始化 Binance API 客户端
@@ -155,7 +155,7 @@ def update_orders(current_price):
                 filled_flag = True
                 filled_trade_side = order_info['side']
                 filled_trade_qty = round(float(order_info['executedQty']), quantityDecimals)
-                filled_trade_price = order_info['price']
+                filled_trade_price = round(float(order_info['price']), priceDecimals)
                 filled_message += f"{filled_trade_side} {filled_trade_qty}{baseAsset} at {filled_trade_price}"
                 if filled_trade_side == 'BUY':
                     refer_price = (last_refer_price - priceStep)

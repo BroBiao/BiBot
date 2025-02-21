@@ -10,17 +10,17 @@ from binance.error import ClientError, ServerError
 
 
 # 配置参数
-initialBuyQuantity=0.1
-buyIncrement=0.01
-sellQuantity=0.1
-priceStep = 10
-quantityDecimals = 2
-priceDecimals = 1
-baseAsset = 'BCH'
+initialBuyQuantity=0.007
+buyIncrement=0.001
+sellQuantity=0.007
+priceStep = 1000
+quantityDecimals = 3
+priceDecimals = 2
+baseAsset = 'BTC'
 quoteAsset = 'FDUSD'
 pair = baseAsset + quoteAsset
-numOrders = 4
-dryRun = False
+numOrders = 3
+dryRun = True
 
 # 初始化 Binance API 客户端
 load_dotenv()
@@ -145,31 +145,27 @@ def update_orders(current_price):
     # 挂单减少(成交或取消)
     else:
         # 确认消失的挂单是否成交
-        filled_flag = False
+        refer_price = last_refer_price
         filled_message = ''
         last_trade_time = 0
         for order in filled_orders:
             order_info = client.get_order(symbol=pair, orderId=int(order))
             # 确认成交，使用最新成交订单的数据
             if order_info['status'] == 'FILLED':
-                filled_flag = True
                 filled_trade_side = order_info['side']
                 filled_trade_qty = round(float(order_info['executedQty']), quantityDecimals)
                 filled_trade_price = round(float(order_info['price']), priceDecimals)
                 filled_message += f"{filled_trade_side} {filled_trade_qty}{baseAsset} at {filled_trade_price}"
                 if filled_trade_side == 'BUY':
-                    refer_price = (last_refer_price - priceStep)
+                    refer_price -= priceStep
                 else:
-                    refer_price = (last_refer_price + priceStep)
+                    refer_price += priceStep
                 # 更新最新成交订单数据
                 filled_time = order_info['updateTime']
                 if filled_time > last_trade_time:
                     last_trade_time = filled_time
                     last_trade_side = filled_trade_side
                     last_trade_qty = filled_trade_qty
-        # 消失的挂单未成交(被取消)，挂单参考价保持不变
-        if filled_flag == False:
-            refer_price = last_refer_price
 
     # 取消剩余挂单
     if open_orders:
@@ -181,7 +177,7 @@ def update_orders(current_price):
         return
 
     # 发送成交信息
-    if filled_orders and filled_flag:
+    if filled_orders and filled_message:
         send_message(filled_message)
 
     buy_orders.clear()
@@ -253,7 +249,7 @@ def main():
         except Exception as e:
             traceback.print_exc()
             send_message(f"一般错误: {str(e)}")
-            time.sleep(5)  # 发生其他错误后短暂暂停再重试
+            time.sleep(60)  # 发生其他错误后短暂暂停再重试
 
 if __name__ == "__main__":
     main()

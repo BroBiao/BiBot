@@ -32,7 +32,8 @@ client = Spot(api_key, api_secret)
 bot_token = os.getenv('BOT_TOKEN')
 chat_id = os.getenv('CHAT_ID')
 bot = telegram.Bot(bot_token)
-loop = asyncio.get_event_loop()
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 # 辅助变量
 buy_orders = []

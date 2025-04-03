@@ -1,6 +1,3 @@
-requests
-pandas
-numpy
-pytz
+binance-connector
 python-dotenv
 python-telegram-bot

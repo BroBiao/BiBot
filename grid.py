@@ -11,10 +11,10 @@ from binance.error import ClientError, ServerError
 
 # 配置参数
 initialBuyQuantity=0.007
-buyIncrement=0.001
+buyIncrement=0.0005
 sellQuantity=0.007
 priceStep = 1000
-quantityDecimals = 3
+quantityDecimals = 4
 priceDecimals = 2
 baseAsset = 'BTC'
 quoteAsset = 'FDUSD'
@@ -49,8 +49,8 @@ def send_message(message):
         loop.run_until_complete(bot.send_message(chat_id=chat_id, text=message))
 
 def format_price(price):
-    """价格抹零，格式化为priceStep的整数倍"""
-    return int(float(price) // priceStep * priceStep)
+    """价格抹零，格式化为priceStep的整数倍加priceStep/2"""
+    return int((float(price) // priceStep * priceStep) + (priceStep / 2))
 
 def get_balance():
     """获取资产余额"""

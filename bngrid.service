@@ -1,0 +1,21 @@
+[Unit]
+Description=Binance Grid Trading Bot
+After=network.target
+
+[Service]
+Type=notify
+User=ubuntu
+WorkingDirectory=/home/ubuntu/BiBot
+ExecStart=/home/ubuntu/BiBot/venv/bin/python3 -u /home/ubuntu/BiBot/grid.py
+Restart=always
+RestartSec=30
+
+# Watchdog配置
+WatchdogSec=60
+NotifyAccess=main
+
+# 环境变量
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

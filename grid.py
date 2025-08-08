@@ -7,6 +7,7 @@ import traceback
 from dotenv import load_dotenv
 from binance.spot import Spot
 from binance.error import ClientError, ServerError
+import systemd.daemon
 
 
 # 配置参数
@@ -267,6 +268,10 @@ def main():
     """主程序：实时更新价格，执行网格交易"""
     print('程序启动')
     
+    # 通知systemd服务已准备就绪
+    systemd.daemon.notify('READY=1')
+    watchdog_counter = 0
+    
     while True:
         try:
             # 获取最新价格
@@ -276,10 +281,19 @@ def main():
             # 更新挂单
             update_orders(current_price)
 
+            # 每5次循环向systemd发送watchdog信号
+            watchdog_counter += 1
+            if watchdog_counter >= 5:
+                systemd.daemon.notify('WATCHDOG=1')
+                watchdog_counter = 0
+
             # 间隔 3 秒更新价格
             time.sleep(3)
 
         except ClientError as e:
+            # 即使发生错误也要发送watchdog信号，表示程序仍在运行
+            systemd.daemon.notify('WATCHDOG=1')
+            
             if e.status_code == 429:
                 send_message("达到API速率限制，程序暂停10分钟")
                 time.sleep(600)
@@ -290,6 +304,9 @@ def main():
                 send_message(f"API客户端错误\nerror_code: {e.error_code}\nerror_message: {e.error_message}")
                 time.sleep(30)
         except Exception as e:
+            # 即使发生错误也要发送watchdog信号
+            systemd.daemon.notify('WATCHDOG=1')
+            
             traceback.print_exc()
             send_message(f"一般错误: {str(e)}")
             time.sleep(60)  # 发生其他错误后短暂暂停再重试

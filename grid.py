@@ -39,13 +39,6 @@ buy_orders = []
 sell_orders = []
 last_refer_price = 0
 
-async def send_message_async(message):
-    """异步发送Telegram消息"""
-    try:
-        await bot.send_message(chat_id=chat_id, text=message)
-    except Exception as e:
-        print(f"发送Telegram消息失败: {e}")
-
 def send_message(message):
     """
     发送信息到Telegram
@@ -54,7 +47,7 @@ def send_message(message):
     if not dryRun:
         try:
             # 使用新的事件循环避免冲突
-            asyncio.run(send_message_async(message))
+            asyncio.run(bot.send_message(chat_id=chat_id, text=message))
         except Exception as e:
             print(f"发送消息时发生错误: {e}")
 

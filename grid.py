@@ -11,9 +11,9 @@ import systemd.daemon
 
 
 # 配置参数
-initialBuyQuantity=0.007
-buyIncrement=0.0005
-sellQuantity=0.007
+initialBuyQuantity=0.004
+buyIncrement=0.0004
+sellQuantity=0.004
 priceStep = 1000
 quantityDecimals = 4
 priceDecimals = 2
@@ -33,6 +33,8 @@ client = Spot(api_key, api_secret)
 bot_token = os.getenv('BOT_TOKEN')
 chat_id = os.getenv('CHAT_ID')
 bot = telegram.Bot(bot_token)
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 # 辅助变量
 buy_orders = []
@@ -46,8 +48,7 @@ def send_message(message):
     print(message)  # 输出到日志
     if not dryRun:
         try:
-            # 使用新的事件循环避免冲突
-            asyncio.run(bot.send_message(chat_id=chat_id, text=message))
+            loop.run_until_complete(bot.send_message(chat_id=chat_id, text=message))
         except Exception as e:
             print(f"发送消息时发生错误: {e}")
 

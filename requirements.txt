@@ -2,3 +2,4 @@ binance-connector
 python-dotenv
 python-telegram-bot
 systemd-python
+websocket-client

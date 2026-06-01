@@ -76,8 +76,8 @@ asyncio.set_event_loop(loop)
 buy_orders = []
 sell_orders = []
 last_refer_price = Decimal('0')
-filled_order_events = []
-filled_order_events_lock = threading.RLock()
+terminal_order_events = []
+terminal_order_events_lock = threading.RLock()
 order_update_event = threading.Event()
 ws_restart_event = threading.Event()
 ws_stopping_event = threading.Event()
@@ -175,22 +175,23 @@ def refresh_balance_if_needed(asset, current_balance, required_balance, attempts
 
     return current_balance
 
-def push_filled_event(data):
+def push_terminal_order_event(data):
     event = {
         'orderId': int(data['i']),
         'side': data['S'],
+        'status': data['X'],
         'qty': to_decimal(data['z']),
         'price': to_decimal(data['p']),
         'time': int(data.get('T') or data.get('E') or 0),
     }
-    with filled_order_events_lock:
-        filled_order_events.append(event)
+    with terminal_order_events_lock:
+        terminal_order_events.append(event)
 
 
-def pop_filled_events():
-    with filled_order_events_lock:
-        events = list(filled_order_events)
-        filled_order_events.clear()
+def pop_terminal_order_events():
+    with terminal_order_events_lock:
+        events = list(terminal_order_events)
+        terminal_order_events.clear()
     return events
 
 def sign_websocket_params(params):
@@ -226,8 +227,10 @@ def handle_websocket_message(_, message):
             status = data.get('X')
             order_id = int(data.get('i'))
             print(f"订单事件: {data.get('S')} {status} orderId={order_id} lastQty={fmt(to_decimal(data.get('l')))} cumQty={fmt(to_decimal(data.get('z')))}")
-            if status == 'FILLED' and order_id in buy_orders + sell_orders:
-                push_filled_event(data)
+            if order_id in buy_orders + sell_orders:
+                if status not in ['FILLED', 'CANCELED', 'EXPIRED', 'EXPIRED_IN_MATCH', 'REJECTED']:
+                    return
+                push_terminal_order_event(data)
                 order_update_event.set()
             return
 
@@ -336,13 +339,17 @@ def update_orders():
 
         open_orders = client.get_open_orders(symbol=pair)
         open_orders = [order['orderId'] for order in open_orders]
+        tracked_order_ids = set(buy_orders + sell_orders)
 
-        filled_events = pop_filled_events()
-        filled_event_by_id = {event['orderId']: event for event in filled_events}
-        filled_orders = set(buy_orders + sell_orders) - set(open_orders)
-        filled_orders.update(filled_event_by_id.keys())
+        terminal_events = [
+            event for event in pop_terminal_order_events()
+            if event['orderId'] in tracked_order_ids
+        ]
+        terminal_event_by_id = {event['orderId']: event for event in terminal_events}
+        closed_orders = tracked_order_ids - set(open_orders)
+        closed_orders.update(terminal_event_by_id.keys())
 
-        if not filled_orders:
+        if not closed_orders:
             if sell_orders or buy_orders:
                 print('等待挂单成交...')
                 return
@@ -360,9 +367,11 @@ def update_orders():
             last_trade_time = 0
             processed_fills = 0
 
-            for order in filled_orders:
-                event = filled_event_by_id.get(int(order))
+            for order in closed_orders:
+                event = terminal_event_by_id.get(int(order))
                 if event:
+                    if event['status'] != 'FILLED':
+                        continue
                     filled_trade_side = event['side']
                     filled_trade_qty = quantize_quantity(event['qty'])
                     filled_trade_price = quantize_price(event['price'])
@@ -400,7 +409,7 @@ def update_orders():
         elif open_orders:
             print('只读预演模式，跳过取消现有挂单')
 
-        if filled_orders and filled_message:
+        if closed_orders and filled_message:
             send_message(filled_message.strip())
 
         buy_orders.clear()

@@ -34,6 +34,11 @@ buy_increment = Decimal(str(buyIncrement))
 initial_buy_quantity = Decimal(str(initialBuyQuantity))
 sell_quantity = Decimal(str(sellQuantity))
 
+def fmt(value):
+    if isinstance(value, Decimal):
+        return format(value.normalize(), 'f')
+    return str(value)
+
 # 初始化 Binance API 客户端
 load_dotenv()
 api_key = os.getenv('API_KEY')
@@ -58,7 +63,7 @@ symbol_filters = get_symbol_filters(pair)
 price_quantum = symbol_filters['price_quantum']
 quantity_quantum = symbol_filters['quantity_quantum']
 min_notional = symbol_filters['min_notional']
-print(f"Loaded {pair} filters: tickSize={price_quantum}, stepSize={quantity_quantum}, minNotional={min_notional}")
+print(f"Loaded {pair} filters: tickSize={fmt(price_quantum)}, stepSize={fmt(quantity_quantum)}, minNotional={fmt(min_notional)}")
 
 # 初始化Telegram Bot
 bot_token = os.getenv('BOT_TOKEN')
@@ -220,7 +225,7 @@ def handle_websocket_message(_, message):
         if event_type == 'executionReport' and data.get('s') == pair:
             status = data.get('X')
             order_id = int(data.get('i'))
-            print(f"订单事件: {data.get('S')} {status} orderId={order_id} lastQty={data.get('l')} cumQty={data.get('z')}")
+            print(f"订单事件: {data.get('S')} {status} orderId={order_id} lastQty={fmt(to_decimal(data.get('l')))} cumQty={fmt(to_decimal(data.get('z')))}")
             if status == 'FILLED' and order_id in buy_orders + sell_orders:
                 push_filled_event(data)
                 order_update_event.set()
@@ -372,7 +377,7 @@ def update_orders():
                     filled_time = int(order_info['updateTime'])
 
                 processed_fills += 1
-                filled_message += f"{filled_trade_side} {filled_trade_qty}{baseAsset} at {filled_trade_price}\n"
+                filled_message += f"{filled_trade_side} {fmt(filled_trade_qty)}{baseAsset} at {fmt(filled_trade_price)}\n"
                 if filled_trade_side == 'BUY':
                     refer_price -= price_step
                 else:
@@ -411,36 +416,36 @@ def update_orders():
             buy_qty = quantize_quantity(initial_buy_qty + i * buy_increment)
             required_quote = buy_price * buy_qty
             if not has_min_notional(buy_price, buy_qty):
-                send_message(f"订单金额: {required_quote}，低于最小名义金额: {min_notional}")
+                send_message(f"订单金额: {fmt(required_quote)}，低于最小名义金额: {fmt(min_notional)}")
                 break
             quote_balance = refresh_balance_if_needed(quoteAsset, quote_balance, required_quote)
             if quote_balance < required_quote:
-                send_message(f"{quoteAsset}余额: {quote_balance}，无法在{buy_price}买入{buy_qty}{baseAsset}")
+                send_message(f"{quoteAsset}余额: {fmt(quote_balance)}，无法在{fmt(buy_price)}买入{fmt(buy_qty)}{baseAsset}")
                 break
             if not tradingEnabled:
-                print(f'在{buy_price}买入{buy_qty}{baseAsset}挂单成功')
+                print(f'在{fmt(buy_price)}买入{fmt(buy_qty)}{baseAsset}挂单成功')
                 continue
             order = place_order('BUY', buy_qty, buy_price)
             if order:
-                print(f'在{buy_price}买入{buy_qty}{baseAsset}挂单成功')
+                print(f'在{fmt(buy_price)}买入{fmt(buy_qty)}{baseAsset}挂单成功')
                 buy_orders.append(order['orderId'])
                 quote_balance -= required_quote
 
         for i in range(numOrders):
             sell_price = quantize_price(refer_price + (i + 1) * price_step)
             if not has_min_notional(sell_price, sell_quantity):
-                send_message(f"订单金额: {sell_price * sell_quantity}，低于最小名义金额: {min_notional}")
+                send_message(f"订单金额: {fmt(sell_price * sell_quantity)}，低于最小名义金额: {fmt(min_notional)}")
                 break
             base_balance = refresh_balance_if_needed(baseAsset, base_balance, sell_quantity)
             if base_balance < sell_quantity:
-                print(f"{baseAsset}余额: {base_balance}，无法在{sell_price}卖出{sell_quantity}{baseAsset}")
+                print(f"{baseAsset}余额: {fmt(base_balance)}，无法在{fmt(sell_price)}卖出{fmt(sell_quantity)}{baseAsset}")
                 break
             if not tradingEnabled:
-                print(f'在{sell_price}卖出{sell_quantity}{baseAsset}挂单成功')
+                print(f'在{fmt(sell_price)}卖出{fmt(sell_quantity)}{baseAsset}挂单成功')
                 continue
             order = place_order('SELL', sell_quantity, sell_price)
             if order:
-                print(f'在{sell_price}卖出{sell_quantity}{baseAsset}挂单成功')
+                print(f'在{fmt(sell_price)}卖出{fmt(sell_quantity)}{baseAsset}挂单成功')
                 sell_orders.append(order['orderId'])
                 base_balance -= sell_quantity
 

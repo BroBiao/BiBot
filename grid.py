@@ -29,6 +29,7 @@ tradingEnabled = not dryRun
 telegramEnabled = not dryRun
 websocketRestartInterval = 23 * 60 * 60
 restReconcileInterval = 5 * 60
+maxEventRetryDelay = 5 * 60
 price_step = Decimal(str(priceStep))
 buy_increment = Decimal(str(buyIncrement))
 initial_buy_quantity = Decimal(str(initialBuyQuantity))
@@ -183,16 +184,69 @@ def push_terminal_order_event(data):
         'qty': to_decimal(data['z']),
         'price': to_decimal(data['p']),
         'time': int(data.get('T') or data.get('E') or 0),
+        'attempts': 0,
+        'nextRetryAt': 0,
     }
     with terminal_order_events_lock:
         terminal_order_events.append(event)
 
 
-def pop_terminal_order_events():
+def snapshot_terminal_order_events(now=None):
+    if now is None:
+        now = time.time()
     with terminal_order_events_lock:
-        events = list(terminal_order_events)
-        terminal_order_events.clear()
-    return events
+        return [
+            event for event in terminal_order_events
+            if event.get('nextRetryAt', 0) <= now
+        ]
+
+
+def discard_terminal_order_events(order_ids):
+    order_ids = set(order_ids)
+    if not order_ids:
+        return
+    with terminal_order_events_lock:
+        terminal_order_events[:] = [
+            event for event in terminal_order_events
+            if event['orderId'] not in order_ids
+        ]
+
+
+def defer_terminal_order_events(order_ids):
+    order_ids = set(order_ids)
+    if not order_ids:
+        return
+    now = time.time()
+    with terminal_order_events_lock:
+        for event in terminal_order_events:
+            if event['orderId'] not in order_ids:
+                continue
+            event['attempts'] = event.get('attempts', 0) + 1
+            delay = min(2 ** (event['attempts'] - 1), maxEventRetryDelay)
+            event['nextRetryAt'] = now + delay
+            print(f"订单事件处理失败，{delay}秒后重试: orderId={event['orderId']} attempts={event['attempts']}")
+
+
+def prune_stale_terminal_order_events():
+    tracked_order_ids = set(buy_orders + sell_orders)
+    with terminal_order_events_lock:
+        terminal_order_events[:] = [
+            event for event in terminal_order_events
+            if event['orderId'] in tracked_order_ids
+        ]
+
+
+def has_due_terminal_order_events(now=None):
+    if now is None:
+        now = time.time()
+    tracked_order_ids = set(buy_orders + sell_orders)
+    if not tracked_order_ids:
+        return False
+    with terminal_order_events_lock:
+        return any(
+            event['orderId'] in tracked_order_ids and event.get('nextRetryAt', 0) <= now
+            for event in terminal_order_events
+        )
 
 def sign_websocket_params(params):
     payload = '&'.join(f"{key}={params[key]}" for key in sorted(params))
@@ -332,19 +386,22 @@ def update_orders():
     """更新挂单"""
     global buy_orders, sell_orders, last_refer_price
 
+    processed_event_order_ids = []
     try:
+        tracked_order_ids = set(buy_orders + sell_orders)
+        terminal_events = [
+            event for event in snapshot_terminal_order_events()
+            if event['orderId'] in tracked_order_ids
+        ]
+        processed_event_order_ids = [event['orderId'] for event in terminal_events]
+
         balance = get_balance()
         base_balance = balance[baseAsset]['free'] + balance[baseAsset]['locked']
         quote_balance = balance[quoteAsset]['free'] + balance[quoteAsset]['locked']
 
         open_orders = client.get_open_orders(symbol=pair)
         open_orders = [order['orderId'] for order in open_orders]
-        tracked_order_ids = set(buy_orders + sell_orders)
 
-        terminal_events = [
-            event for event in pop_terminal_order_events()
-            if event['orderId'] in tracked_order_ids
-        ]
         terminal_event_by_id = {event['orderId']: event for event in terminal_events}
         closed_orders = tracked_order_ids - set(open_orders)
         closed_orders.update(terminal_event_by_id.keys())
@@ -356,6 +413,7 @@ def update_orders():
 
             last_trade = get_last_trade_summary(pair)
             if not last_trade:
+                defer_terminal_order_events(processed_event_order_ids)
                 return
 
             last_trade_side = last_trade['side']
@@ -400,6 +458,7 @@ def update_orders():
             if processed_fills == 0:
                 last_trade = get_last_trade_summary(pair)
                 if not last_trade:
+                    defer_terminal_order_events(processed_event_order_ids)
                     return
                 last_trade_side = last_trade['side']
                 last_trade_qty = last_trade['qty']
@@ -459,8 +518,11 @@ def update_orders():
                 base_balance -= sell_quantity
 
         last_refer_price = quantize_price(refer_price)
+        discard_terminal_order_events(processed_event_order_ids)
+        prune_stale_terminal_order_events()
 
     except Exception as e:
+        defer_terminal_order_events(processed_event_order_ids)
         print(f"更新订单时发生错误: {e}")
         traceback.print_exc()
         send_message(f"更新订单时发生错误: {str(e)}")
@@ -490,6 +552,10 @@ def main():
 
                 if order_update_event.wait(timeout=1):
                     order_update_event.clear()
+                    update_orders()
+                    next_rest_reconcile = time.time() + restReconcileInterval
+
+                if has_due_terminal_order_events():
                     update_orders()
                     next_rest_reconcile = time.time() + restReconcileInterval
 

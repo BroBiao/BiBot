@@ -30,6 +30,20 @@ telegramEnabled = not dryRun
 websocketRestartInterval = 23 * 60 * 60
 restReconcileInterval = 5 * 60
 maxEventRetryDelay = 5 * 60
+
+# ===== 横盘机会单配置 =====
+enable_stagnation_buy = True
+enable_stagnation_sell = True
+history_symbol = 'BTCUSDT'
+lookback_days = 365
+low_percentile = Decimal('0.20')
+high_percentile = Decimal('0.90')
+stagnation_buy_hours = 24
+stagnation_sell_hours = 48
+stagnation_cooldown_hours = 24
+stagnation_buy_qty_default = Decimal(str(initialBuyQuantity))
+stagnation_sell_qty = Decimal(str(sellQuantity))
+
 price_step = Decimal(str(priceStep))
 buy_increment = Decimal(str(buyIncrement))
 initial_buy_quantity = Decimal(str(initialBuyQuantity))
@@ -77,6 +91,7 @@ asyncio.set_event_loop(loop)
 buy_orders = []
 sell_orders = []
 last_refer_price = Decimal('0')
+last_stagnation_action_time = 0
 terminal_order_events = []
 terminal_order_events_lock = threading.RLock()
 order_update_event = threading.Event()
@@ -155,7 +170,41 @@ def get_last_trade_summary(symbol):
         'side': 'BUY' if last_trade['isBuyer'] else 'SELL',
         'qty': qty,
         'price': to_decimal(last_trade['price']),
+        'time_ms': int(last_trade['time']),
     }
+
+
+def get_last_trade_time(symbol, last_trade=None):
+    """Return the latest account trade timestamp in seconds, or None when unavailable."""
+    if last_trade is None:
+        last_trade = get_last_trade_summary(symbol)
+    return last_trade['time_ms'] // 1000 if last_trade else None
+
+
+def get_price_range(symbol, days):
+    """Return the available daily-kline high and low for the requested lookback."""
+    try:
+        klines = client.klines(symbol=symbol, interval='1d', limit=days)
+        if not klines:
+            print(f"{symbol}未返回历史日线，跳过横盘机会单检查")
+            return None
+        if len(klines) < days:
+            print(f"{symbol}历史日线不足{days}天，跳过横盘机会单检查: 仅有{len(klines)}天")
+            return None
+        return max(to_decimal(kline[2]) for kline in klines), min(to_decimal(kline[3]) for kline in klines)
+    except Exception as e:
+        print(f"获取{symbol}历史高低点失败，跳过横盘机会单检查: {e}")
+        return None
+
+
+def get_current_price(symbol):
+    """Return the current symbol price, or None when the ticker request fails."""
+    try:
+        return to_decimal(client.ticker_price(symbol=symbol)['price'])
+    except Exception as e:
+        print(f"获取{symbol}最新价格失败，跳过横盘机会单检查: {e}")
+        return None
+
 
 def refresh_balance_if_needed(asset, current_balance, required_balance, attempts=3, wait_time=1):
     """余额不足时短暂刷新，避免取消挂单后的余额延迟造成误判"""
@@ -359,19 +408,23 @@ def stop_websocket_client(user_ws):
     except Exception as e:
         print(f"停止WebSocket失败: {e}")
 
-def place_order(side, quantity, price):
-    """挂单函数"""
+def place_order(side, quantity, price, maker_only=False):
+    """Place a normal limit order or a maker-only opportunity order."""
     try:
-        order = client.new_order(
-            symbol=pair,
-            side=side,
-            type='LIMIT',
-            timeInForce='GTC',
-            quantity=format(quantize_quantity(quantity), 'f'),
-            price=format(quantize_price(price), 'f')
-        )
-        return order
+        params = {
+            'symbol': pair,
+            'side': side,
+            'type': 'LIMIT_MAKER' if maker_only else 'LIMIT',
+            'quantity': format(quantize_quantity(quantity), 'f'),
+            'price': format(quantize_price(price), 'f'),
+        }
+        if not maker_only:
+            params['timeInForce'] = 'GTC'
+        return client.new_order(**params)
     except ClientError as e:
+        if maker_only and e.error_code == -2010 and 'immediately match' in e.error_message.lower():
+            print(f"横盘maker单被拒绝，价格将会吃单，等待下次检查重试: {side} {fmt(quantity)} @ {fmt(price)}")
+            return None
         send_message(f"挂单失败!\nerror_code: {e.error_code}\nerror_message: {e.error_message}")
         return None
     except ServerError as e:
@@ -381,6 +434,95 @@ def place_order(side, quantity, price):
         print(f"挂单时发生未知错误: {e}")
         send_message(f"挂单时发生未知错误: {e}")
         return None
+
+def check_and_execute_stagnation():
+    """Place one independent opportunity order when price stagnates at an extreme."""
+    global last_stagnation_action_time
+
+    now = time.time()
+    cooldown_seconds = stagnation_cooldown_hours * 60 * 60
+    if last_stagnation_action_time and now - last_stagnation_action_time < cooldown_seconds:
+        return
+
+    price_range = get_price_range(history_symbol, lookback_days)
+    current_price = get_current_price(pair)
+    if not price_range or current_price is None:
+        return
+
+    range_high, range_low = price_range
+    if range_high <= range_low:
+        print(f"{history_symbol}历史价格区间无效，跳过横盘机会单检查")
+        return
+
+    try:
+        last_trade = get_last_trade_summary(pair)
+        last_trade_time = get_last_trade_time(pair, last_trade)
+    except Exception as e:
+        print(f"获取最近成交信息失败，跳过横盘机会单检查: {e}")
+        return
+
+    if last_trade_time is None:
+        print("没有账户成交记录，跳过横盘机会单检查")
+        return
+
+    range_position = (current_price - range_low) / (range_high - range_low)
+    inactive_seconds = max(0, int(now - last_trade_time))
+    inactive_hours = Decimal(inactive_seconds) / Decimal(60 * 60)
+
+    if enable_stagnation_buy and range_position <= low_percentile and inactive_seconds >= stagnation_buy_hours * 60 * 60:
+        side = 'BUY'
+        quantity = last_trade['qty'] if last_trade['side'] == 'BUY' else stagnation_buy_qty_default
+        price = quantize_price(current_price - price_quantum)
+        action_name = '低位横盘加仓'
+    elif enable_stagnation_sell and range_position >= high_percentile and inactive_seconds >= stagnation_sell_hours * 60 * 60:
+        side = 'SELL'
+        quantity = stagnation_sell_qty
+        price = quantize_price(current_price + price_quantum)
+        action_name = '高位横盘减仓'
+    else:
+        return
+
+    quantity = quantize_quantity(quantity)
+    if price <= 0 or quantity <= 0:
+        print(f"横盘机会单价格或数量无效: price={fmt(price)}, quantity={fmt(quantity)}")
+        return
+    if not has_min_notional(price, quantity):
+        print(f"横盘机会单金额: {fmt(price * quantity)}，低于最小名义金额: {fmt(min_notional)}")
+        return
+
+    try:
+        balance = get_balance()
+    except Exception as e:
+        print(f"获取余额失败，跳过横盘机会单: {e}")
+        return
+
+    if side == 'BUY':
+        required_balance = price * quantity
+        available_balance = balance[quoteAsset]['free']
+        asset = quoteAsset
+    else:
+        required_balance = quantity
+        available_balance = balance[baseAsset]['free']
+        asset = baseAsset
+
+    if available_balance < required_balance:
+        print(f"横盘机会单{asset}可用余额不足: {fmt(available_balance)} < {fmt(required_balance)}")
+        return
+
+    message = (
+        f"【{action_name}】range_position={fmt(range_position)}，已{inactive_hours:.1f}小时无成交，"
+        f"限价{('买入' if side == 'BUY' else '卖出')} {fmt(quantity)} {baseAsset} @ {fmt(price)}"
+    )
+    if not tradingEnabled:
+        send_message(f"[dryRun] {message}")
+        last_stagnation_action_time = now
+        return
+
+    order = place_order(side, quantity, price, maker_only=True)
+    if order:
+        send_message(message)
+        last_stagnation_action_time = now
+
 
 def update_orders():
     """更新挂单"""
@@ -540,6 +682,7 @@ def main():
         next_rest_reconcile = time.time() + restReconcileInterval
 
         update_orders()
+        check_and_execute_stagnation()
         systemd.daemon.notify('READY=1')
 
         while True:
@@ -562,6 +705,7 @@ def main():
                 if time.time() >= next_rest_reconcile:
                     print('执行REST兜底对账')
                     update_orders()
+                    check_and_execute_stagnation()
                     next_rest_reconcile = time.time() + restReconcileInterval
 
                 if time.time() - last_watchdog >= 15:

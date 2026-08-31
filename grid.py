@@ -102,6 +102,10 @@ user_stream_ready_event = threading.Event()
 def to_decimal(value):
     return Decimal(str(value))
 
+def raise_if_rate_limit(error):
+    if isinstance(error, ClientError) and error.status_code in (418, 429):
+        raise error
+
 def floor_to_step(value, step):
     value = to_decimal(value)
     return (value // step) * step
@@ -159,12 +163,22 @@ def get_last_trade_summary(symbol):
         print(f"获取最新交易失败: {e}")
         raise
 
-    try:
-        order_info = client.get_order(symbol=symbol, orderId=int(last_trade['orderId']))
-        qty = to_decimal(order_info['executedQty'])
-    except Exception as e:
-        print(f"获取订单累计成交数量失败，回退到单笔成交数量: {e}")
-        qty = to_decimal(last_trade['qty'])
+    qty = None
+    for attempt in range(3):
+        try:
+            order_info = client.get_order(symbol=symbol, orderId=int(last_trade['orderId']))
+            qty = to_decimal(order_info['executedQty'])
+            break
+        except Exception as e:
+            raise_if_rate_limit(e)
+            print(f"获取订单累计成交数量失败: {e}")
+
+        if attempt < 2:
+            time.sleep(1)
+
+    if qty is None:
+        print("无法获取订单累计成交数量，跳过本次更新")
+        return None
 
     return {
         'side': 'BUY' if last_trade['isBuyer'] else 'SELL',
@@ -193,6 +207,7 @@ def get_price_range(symbol, days):
             return None
         return max(to_decimal(kline[2]) for kline in klines), min(to_decimal(kline[3]) for kline in klines)
     except Exception as e:
+        raise_if_rate_limit(e)
         print(f"获取{symbol}历史高低点失败，跳过横盘机会单检查: {e}")
         return None
 
@@ -202,6 +217,7 @@ def get_current_price(symbol):
     try:
         return to_decimal(client.ticker_price(symbol=symbol)['price'])
     except Exception as e:
+        raise_if_rate_limit(e)
         print(f"获取{symbol}最新价格失败，跳过横盘机会单检查: {e}")
         return None
 
@@ -221,6 +237,7 @@ def refresh_balance_if_needed(asset, current_balance, required_balance, attempts
                 return latest_balance
             current_balance = latest_balance
         except Exception as e:
+            raise_if_rate_limit(e)
             print(f"刷新{asset}余额时发生错误: {e}")
 
     return current_balance
@@ -422,6 +439,7 @@ def place_order(side, quantity, price, maker_only=False):
             params['timeInForce'] = 'GTC'
         return client.new_order(**params)
     except ClientError as e:
+        raise_if_rate_limit(e)
         if maker_only and e.error_code == -2010 and 'immediately match' in e.error_message.lower():
             print(f"横盘maker单被拒绝，价格将会吃单，等待下次检查重试: {side} {fmt(quantity)} @ {fmt(price)}")
             return None
@@ -458,6 +476,7 @@ def check_and_execute_stagnation():
         last_trade = get_last_trade_summary(pair)
         last_trade_time = get_last_trade_time(pair, last_trade)
     except Exception as e:
+        raise_if_rate_limit(e)
         print(f"获取最近成交信息失败，跳过横盘机会单检查: {e}")
         return
 
@@ -493,6 +512,7 @@ def check_and_execute_stagnation():
     try:
         balance = get_balance()
     except Exception as e:
+        raise_if_rate_limit(e)
         print(f"获取余额失败，跳过横盘机会单: {e}")
         return
 
@@ -514,7 +534,7 @@ def check_and_execute_stagnation():
         f"限价{('买入' if side == 'BUY' else '卖出')} {fmt(quantity)} {baseAsset} @ {fmt(price)}"
     )
     if not tradingEnabled:
-        send_message(f"[dryRun] {message}")
+        print(f"[dryRun] {message}")
         last_stagnation_action_time = now
         return
 
@@ -665,6 +685,7 @@ def update_orders():
 
     except Exception as e:
         defer_terminal_order_events(processed_event_order_ids)
+        raise_if_rate_limit(e)
         print(f"更新订单时发生错误: {e}")
         traceback.print_exc()
         send_message(f"更新订单时发生错误: {str(e)}")
